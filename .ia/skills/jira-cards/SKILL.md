@@ -34,6 +34,10 @@ Opera cards do Jira pelo MCP da Atlassian. Idioma: português (BR).
 1. Liste as transições possíveis do card com `listJiraIssueTransitions` (via `executeRead`); o status desejado pode não estar disponível a partir do status atual.
 2. Confirme e aplique com `transitionJiraIssue`. Se a transição exigir campos, pergunte.
 
+## Limitação: escrita via subagente
+
+O agente `jira-assistant` roda como subagente e só aceita o "sim" do usuário se vier em mensagem direta a ele. A confirmação repassada pelo agente principal **não** vale, então, nesse modo, ele faz só leituras (descobrir campos obrigatórios, montar o resumo com IDs). Para criar, editar ou transicionar: o agente principal mostra o resumo, o usuário confirma na sessão principal e a escrita é feita nela (validado com o TCI-254). Isso não muda a regra 2: nunca escrever sem "sim" explícito do usuário.
+
 ## Outras equipes
 
 Para projetos sem arquivo em `teams/`, use apenas o que a API informa como obrigatório e pergunte todos os valores. Ao final, ofereça criar `teams/<projeto>.md` com os padrões usados.
