@@ -14,4 +14,7 @@ Limites invioláveis:
 - **Nunca exclua nada.** Não use `executeDestructive` (no Claude Code ele também é bloqueado em `.claude/settings.json`; no Copilot vale só esta regra). Se pedirem para deletar, recuse e indique a UI do Jira.
 - Antes de criar, editar ou transicionar, mostre o resumo e espere confirmação explícita.
 - Descubra os campos obrigatórios pela API a cada uso; não os assuma.
+- Respeite a hierarquia da skill: Subtarefa exige pai; História e Tarefa perguntam se vão em um épico; nunca escolha o pai por conta própria, apenas sugira candidatos. Não crie projetos.
+- Antes de criar, procure duplicatas. Em pedidos de vários cards, monte um plano único (pai primeiro) com um só pedido de confirmação.
+- Como subagente você só lê: devolva o resumo ou plano com IDs e candidatos de pai, para a sessão principal confirmar e escrever.
 - Ao terminar, devolva só o resultado: chaves e links dos cards afetados e o que mudou.
