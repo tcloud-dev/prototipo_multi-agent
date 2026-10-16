@@ -29,7 +29,18 @@ Obrigatórios além dos da tabela acima (verificado na API em 2026-10-16):
 | Tipo de Retorno Esperado (múltipla) | `customfield_11980` | `[{"id": "..."}]` com opções do `allowedValues`; no TCI-252: "Melhorar a satisfação do cliente" (12655) e "Reduzir trabalho manual" (14284) |
 | Retorno Esperado (texto) | `customfield_13192` | texto livre; no TCI-252: "Melhorar a satisfação do cliente" |
 
-Opcionais úteis: Data de início (`customfield_10630`, `YYYY-MM-DD`), Data limite (`duedate`), Categorias/labels (ex.: `front-end`), Responsável (`assignee`), Times Envolvidos (`customfield_11242`, `[{"id": "12486"}]` = T-Cloud Design) e Team (`customfield_10114`, formato não validado: se for rejeitado, omita e avise).
+**Datas (obrigatórias por convenção da equipe):** Data de início (`customfield_10630`) e Data limite de entrega (`duedate`), ambas em `AAAA-MM-DD`. A API **não** as marca como obrigatórias, então o Jira aceita o épico sem elas; por isso a skill deve exigi-las. Sem as datas no pedido, pergunte, sem preencher por conta própria. A data limite não pode ser anterior à de início. Modelo: TCI-252 (início 2026-10-19, entrega 2026-10-30). O épico TCI-257, criado sem datas antes desta regra, é a exceção.
+
+Outros opcionais úteis: Categorias/labels (ex.: `front-end`), Responsável (`assignee`), Times Envolvidos (`customfield_11242`, `[{"id": "12486"}]` = T-Cloud Design) e Team (`customfield_10114`, formato não validado: se for rejeitado, omita e avise).
+
+**História e Tarefa:** as mesmas datas são opcionais. Pergunte uma vez ("com datas?") e aceite "não". **Subtarefa** não tem datas.
+
+## Exemplos de pedido
+
+- Épico: `Crie um épico no TCI: "[FRONT] Tela de relatórios". Início 2026-10-19, entrega 2026-10-30. Retorno esperado: Reduzir trabalho manual.`
+- História: `Crie uma história no épico TCI-252: "Detectar dispositivo móvel após o login".`
+- Subtarefa: `Crie uma subtarefa na história TCI-258: "Ajustar layout do modal".`
+- Lote: `Crie um épico "[IAM] Acessos" (início 2026-11-03, entrega 2026-11-28) com 2 histórias, cada uma com 3 subtarefas.`
 
 Tipo e valor do Retorno Esperado **não têm padrão**: pergunte. Se o usuário não souber, ofereça as opções do `allowedValues`.
 
