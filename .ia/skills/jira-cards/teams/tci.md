@@ -33,7 +33,7 @@ Obrigatórios além dos da tabela acima (verificado na API em 2026-10-16):
 
 Outros opcionais úteis: Categorias/labels (ex.: `front-end`), Responsável (`assignee`), Times Envolvidos (`customfield_11242`, `[{"id": "12486"}]` = T-Cloud Design) e Team (`customfield_10114`, formato não validado: se for rejeitado, omita e avise).
 
-**História e Tarefa:** as mesmas datas são opcionais. Pergunte uma vez ("com datas?") e aceite "não". **Subtarefa** não tem datas.
+**História e Tarefa:** as mesmas datas são opcionais. Pergunte uma vez ("com datas?") e aceite "não". **Subtarefa** também aceita datas, mas não pergunte: use só se vierem no pedido (ver seção Subtarefa).
 
 ## Exemplos de pedido
 
@@ -46,7 +46,11 @@ Tipo e valor do Retorno Esperado **não têm padrão**: pergunte. Se o usuário 
 
 ## Subtarefa
 
-Só 5 campos: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Sem pai informado, não crie. Não envie campos customizados, componente nem prioridade (a Subtarefa não os tem). Validado com TCI-266 a 271.
+Só 5 campos **obrigatórios**: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Sem pai informado, não crie. Não envie os customizados de História (Tipo de demanda, Área, Produto, Cliente), componente nem prioridade. Validado com TCI-266 a 271.
+
+**Descrição:** a Subtarefa **aceita** descrição (testado em 2026-10-16, TCI-275, via `editJiraIssue`). Ao criar, use o modelo `## O que fazer` de `templates.md`, preenchido com o contexto que o usuário informar (pergunte qual é); sem conteúdo, `A definir`. Num lote, aplique a todas as subtarefas.
+
+**Datas e responsável:** a Subtarefa **aceita** Data de início (`customfield_10630`), Data limite (`duedate`) e Responsável (`assignee`) (testado em 2026-10-16, TCI-289, via `editJiraIssue`; o TCI-223, de outra pessoa, também as tem). São **opcionais e não são perguntados**: use só o que o usuário informar no pedido (ex.: `Crie uma subtarefa na história TCI-258: "Ajustar layout". Início 2026-10-19, limite 2026-10-23, responsável eu.`). Sem essa informação, crie sem esses campos. Valide `AAAA-MM-DD` e que a data limite não seja anterior à de início. Efeito do Jira: com data limite, Classes de Serviço passa de `Standard` para `Fixed Date`.
 
 ## Hierarquia (testado em 2026-10-16)
 
