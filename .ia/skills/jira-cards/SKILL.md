@@ -49,6 +49,7 @@ Uma Tarefa nunca tem uma História como pai (ver abaixo).
 4. **Pai:** aplique a tabela da hierarquia.
 5. **Duplicidade:** busque cards abertos parecidos com `project = <PROJ> AND issuetype = "<tipo>" AND summary ~ "<palavras-chave>" AND statusCategory != Done`. Se achar, mostre e pergunte se deve criar mesmo assim.
 6. Carregue `teams/<projeto>.md` e preencha o que for obrigatório com os padrões. O que não tiver padrão, pergunte. Para a **descrição**, ofereça o modelo do tipo em `templates.md` e preencha com o que o usuário já disse; não invente conteúdo.
+6a. **Datas:** em **Épico**, Data de início e Data limite são obrigatórias por convenção do time (ver `teams/<projeto>.md`), mesmo que a API não as exija. Se faltarem no pedido, pergunte; não as invente nem as omita. Valide `AAAA-MM-DD` e que a data limite não seja anterior à de início. Em História e Tarefa são opcionais (pergunte uma vez); Subtarefa não tem datas. Vale também para cada épico de um lote.
 7. **Título:** siga a convenção de `teams/<projeto>.md` (por exemplo, prefixo `[ÁREA]`). Sugira, sem impor.
 8. Mostre o resumo, peça o "sim" e chame `createJiraIssue`.
 9. Se for rejeitada, leia o `repairHint`, corrija e tente de novo uma vez; depois pergunte.
