@@ -35,12 +35,14 @@ Tipo e valor do Retorno Esperado **não têm padrão**: pergunte. Se o usuário 
 
 ## Subtarefa
 
-Só 5 campos obrigatórios: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Não exige os campos customizados das outras. Sem pai informado, não crie.
+Só 5 campos: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Sem pai informado, não crie. Não envie campos customizados, componente nem prioridade (a Subtarefa não os tem). Validado com TCI-266 a 271.
 
-## Hierarquia e convenção História > Tarefa
+## Hierarquia (testado em 2026-10-16)
 
-- Épico é o pai de História e Tarefa. A convenção "tarefa dentro de história" é organizacional.
-- **A definir:** como registrar a ligação Tarefa -> História. Tipos de link existentes: `Relates` (relates to) e `Polaris work item link` (implements / is implemented by). Até o time decidir, registre "Relacionada a TCI-xxx" na descrição e **não crie link**.
+- Épico é o pai de História e Tarefa. Subtarefa é filha de História ou Tarefa.
+- **Tarefa com História como pai é recusada pelo Jira** (criação e edição). Todas as Tarefas com pai que existem no site têm Épico como pai. Para ter itens dentro de uma história, use **Subtarefa**.
+- Converter Tarefa em Subtarefa usa o "Mover" do Jira: o status vai de Aberto para "Análise de viabilidade" e são descartados Produto, Área solicitante, Tipo de demanda, Cliente, Link Epic, Classificação e Classes de Serviço. Prefira criar a Subtarefa nova.
+- Registro opcional da ligação Tarefa -> História, quando a Tarefa fica no épico: "Relacionada a TCI-xxx" na descrição. Tipos de link existentes (`Relates`, `Polaris work item link`) não foram adotados; não crie link sem o time decidir.
 
 ## Sem padrão (perguntar)
 
