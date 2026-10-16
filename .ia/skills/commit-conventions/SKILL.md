@@ -18,9 +18,10 @@ Nunca execute, nem a pedido indireto. Se forem necessarios, **pare**, explique a
 - `git commit --amend`, `git revert`
 - `git stash drop`, `git branch -D`
 - `--no-verify` em qualquer comando (hooks nao podem ser pulados; se um hook falhar, corrija a causa)
+- `git switch -f` / `--discard-changes`, `git checkout -f` (descartam mudancas)
 - `git add .`, `git add -A`, `git add -u` (sempre adicione caminhos explicitos)
 
-Comandos livres: `git status`, `git diff`, `git log`, `git branch`, `git add <caminho>`, `git commit`, `git push`, `git push --set-upstream origin <branch>`.
+Comandos livres: `git status`, `git diff`, `git log`, `git branch`, `git switch -c <novo-branch>`, `git add <caminho>`, `git commit`, `git push`, `git push --set-upstream origin <branch>`.
 
 ## Fluxo
 
@@ -44,11 +45,15 @@ Comandos livres: `git status`, `git diff`, `git log`, `git branch`, `git add <ca
 - Se a mudanca precisar de explicacao, adicione um corpo separado por linha em branco.
 - Exemplos: `feat(TCI-253): adicionar validacao de dispositivo movel`, `docs: atualizar guia de campos obrigatorios`, `chore: remover arquivos antigos`.
 
-## Push e upstream
+## Branches e push
 
-- Branch de feature (qualquer um que **nao** seja `main`, `master` ou `develop`): faca `git push` direto, sem perguntar.
+Fluxo completo em `git-flow.md` (mesma pasta).
+
+- Branches protegidos: `main`, `env/hmg`, `env/dev`. Nunca commite nem faca push direto neles sem pedido explicito do usuario.
+- Em branch protegido com mudancas pendentes: antes de commitar, crie um branch de trabalho a partir da `main` com `git switch -c <nome>` (as mudancas vao junto), no padrao do `git-flow.md`. Escolha `feat/` ou `fix/` pelo tipo da mudanca, inclua a chave do Jira se houver e avise o usuario. Se o branch atual nao for a `main`, pare e pergunte, pois o branch de trabalho deve sair da `main`.
+- Em `feat/**`, `fix/**` ou `bugfix/**`: faca `git push` direto, sem perguntar.
 - Se falhar com "no upstream branch": `git push --set-upstream origin <branch>`.
-- **Branch protegido (`main`, `master`, `develop`):** nao commite nem faca push sem confirmacao explicita. Sugira criar um branch de feature antes.
+- Os merges em `env/dev`, `env/hmg` e `main` sao feitos por PR (merge commit), nunca por squash ou rebase, e nunca por este agente.
 
 ## Terminal
 
