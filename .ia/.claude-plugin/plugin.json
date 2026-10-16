@@ -1,0 +1,7 @@
+{
+  "name": "atlassian-agent",
+  "description": "Skills para criar, editar e transicionar cards no Jira respeitando os campos obrigatórios de cada equipe.",
+  "version": "0.1.0",
+  "author": { "name": "Johnny Souto" },
+  "license": "MIT"
+}
