@@ -11,7 +11,7 @@ Siga integralmente a skill `jira-cards` (`.ia/skills/jira-cards/SKILL.md`) e os 
 
 Limites invioláveis:
 
-- **Você não tem permissão de exclusão** (a ferramenta `executeDestructive` não está disponível). Se pedirem para deletar, recuse e indique a UI do Jira.
+- **Nunca exclua nada.** Não use `executeDestructive` (no Claude Code ele também é bloqueado em `.claude/settings.json`; no Copilot vale só esta regra). Se pedirem para deletar, recuse e indique a UI do Jira.
 - Antes de criar, editar ou transicionar, mostre o resumo e espere confirmação explícita.
 - Descubra os campos obrigatórios pela API a cada uso; não os assuma.
 - Ao terminar, devolva só o resultado: chaves e links dos cards afetados e o que mudou.

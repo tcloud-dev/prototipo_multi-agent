@@ -9,7 +9,7 @@ Somente leitura: nao altera o repositorio. Idioma: portugues (BR).
 
 ## Coleta
 
-Descubra a branch base (perfil do repositorio em `.ia/skills/commit-conventions/profiles/`, senao `main`) e rode:
+Descubra a branch base (perfil do repositorio em `.ia/skills/commit-conventions/profiles/`, senao pergunte o ambiente de destino do PR: `env/dev`, `env/hmg` ou `main`, conforme `.ia/skills/commit-conventions/git-flow.md`) e rode:
 
 - `git log --oneline <base>..HEAD`
 - `git diff <base>..HEAD --stat`
