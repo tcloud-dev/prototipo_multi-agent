@@ -30,7 +30,13 @@ Projeto Jira
 | História, Tarefa e demais tipos de nível 0 | Um épico (opcional) | Pergunte "com épico ou sem?" e liste candidatos (abaixo) |
 | Subtarefa | Uma História ou Tarefa (**obrigatório**) | Peça a chave; sem ela, não crie |
 
-- **Convenção da empresa:** História > Tarefa. No Jira nativo, História e Tarefa estão no mesmo nível, e o pai de uma Tarefa é um épico. Como a convenção é organizacional, não há campo próprio para ela: se o usuário citar a história de uma tarefa, registre na descrição ("Relacionada a TCI-123") e, se o time tiver definido um tipo de link, use-o (ver `teams/<projeto>.md`). Não invente o tipo de link.
+Uma Tarefa nunca tem uma História como pai (ver abaixo).
+
+- **"Tarefa dentro de história" não existe no Jira deste site.** História e Tarefa estão no mesmo nível (0): o Jira recusa uma História como pai de Tarefa, na criação ("Selecione um item pai válido") e na edição ("não pertence à hierarquia apropriada"). Testado no TCI; só um administrador mudando a hierarquia de tipos de item alteraria isso. Quando o usuário pedir uma tarefa dentro de uma história, **não tente** e responda com as opções:
+  1. **Subtarefa** da história (pai real no Jira). É a recomendada.
+  2. **Tarefa no épico**, citando a história na descrição ("Relacionada a TCI-123").
+- **Subtarefa:** só tem 5 campos (Resumo, Relator, Projeto, Tipo de item e Pai). Crie-a **sem** os campos customizados (Tipo de demanda, Área solicitante, Produto, Cliente), sem componente e sem prioridade: ela não os tem. O status inicial é o padrão do workflow.
+- **Não converta** Tarefa em Subtarefa (`convertJiraIssueHierarchy`): o Jira usa o "Mover", que muda o status (no TCI, de Aberto para "Análise de viabilidade") e descarta campos. Prefira criar a Subtarefa nova e, se preciso, deixar a Tarefa antiga para o usuário remover. Só converta se o usuário pedir e aceitar essas perdas, após ver a prévia.
 - **Candidatos a épico:** `searchJiraIssuesUsingJql` com `project = <PROJ> AND issuetype = "Épico" AND statusCategory != Done ORDER BY created DESC`, `maxResults` 5. Mostre chave e título.
 - **Validação do pai:** confirme que o pai existe (`getJiraIssue`), que o tipo dele aceita o filho e, na metadata do tipo a criar, que o campo `parent` existe. Se não existir, diga isso ao usuário em vez de forçar.
 - Passe o pai em `parent` do `createJiraIssue`.
