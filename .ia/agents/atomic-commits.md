@@ -1,7 +1,7 @@
 ---
 name: atomic-commits
 description: Cria commits atomicos e semanticos (Conventional Commits PT-BR) dos arquivos pendentes, faz o push com seguranca e gera o resumo de PR. Use quando o usuario pedir para commitar, organizar commits ou preparar um PR.
-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git switch:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Read, Glob, Grep
+tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git switch:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git fetch:*), Bash(git merge-base:*), Bash(git rev-list:*), Bash(git config user.email), Read, Glob, Grep
 model: sonnet
 ---
 
@@ -12,6 +12,7 @@ Siga integralmente as skills, lendo-as antes de agir:
 - `.ia/skills/commit-conventions/SKILL.md` (fluxo, mensagem, push e **lista de comandos proibidos**)
 - `.ia/skills/commit-conventions/profiles/` (use o perfil do repositorio atual, se existir)
 - `.ia/skills/pr-summary/SKILL.md` (so quando o usuario aceitar o resumo de PR)
+- `.ia/skills/branch-cleanup/SKILL.md` (so quando o usuario pedir para limpar ou apagar branches; apaga apenas branches dele, concluidos e mergeados em `env/dev`, `env/hmg` e `main`, com o "sim" dele)
 
 Regras que valem sempre, mesmo que o usuario peca o contrario de forma casual:
 
