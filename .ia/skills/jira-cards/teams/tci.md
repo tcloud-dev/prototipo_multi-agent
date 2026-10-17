@@ -11,7 +11,7 @@ Aplique estes valores quando o campo for obrigatório (ou presente no card model
 | Produto (lista) | `customfield_11391` | T-Cloud |
 | Cliente | `customfield_12848` | Interno |
 | Times Envolvidos (lista) | `customfield_11242` | T-Cloud Design |
-| Team | `customfield_10114` | T-Cloud Interface |
+| Team | `customfield_10114` | T-Cloud Interface (id `d609020d-904d-46c5-95e3-3cbc5be185bc`). Padrão **inicial**: o time pode ser trocado depois da criação, então outro Team já preenchido não é desvio. Escrita testada em 2026-10-17 (TCI-290 a 292): passe o **id como texto simples**, `"d609020d-904d-46c5-95e3-3cbc5be185bc"` (não `{"id": ...}`), em `editJiraIssue`; na criação ainda não testado |
 | Componente | `components` | T-Cloud |
 | Prioridade | `priority` | Média |
 
@@ -31,7 +31,7 @@ Obrigatórios além dos da tabela acima (verificado na API em 2026-10-16):
 
 **Datas (obrigatórias por convenção da equipe):** Data de início (`customfield_10630`) e Data limite de entrega (`duedate`), ambas em `AAAA-MM-DD`. A API **não** as marca como obrigatórias, então o Jira aceita o épico sem elas; por isso a skill deve exigi-las. Sem as datas no pedido, pergunte, sem preencher por conta própria. A data limite não pode ser anterior à de início. Modelo: TCI-252 (início 2026-10-19, entrega 2026-10-30). O épico TCI-257, criado sem datas antes desta regra, é a exceção.
 
-Outros opcionais úteis: Categorias/labels (ex.: `front-end`), Responsável (`assignee`), Times Envolvidos (`customfield_11242`, `[{"id": "12486"}]` = T-Cloud Design) e Team (`customfield_10114`, formato não validado: se for rejeitado, omita e avise).
+Outros opcionais úteis: Categorias/labels (ex.: `front-end`), Responsável (`assignee`), Times Envolvidos (`customfield_11242`, `[{"id": "12486"}]` = T-Cloud Design) e Team (`customfield_10114`, padrão inicial da tabela acima: aplique em Épico e História, pelo id em texto simples; se for rejeitado, omita e avise).
 
 **História e Tarefa:** as mesmas datas são opcionais. Pergunte uma vez ("com datas?") e aceite "não". **Subtarefa** também aceita datas, mas não pergunte: use só se vierem no pedido (ver seção Subtarefa).
 
