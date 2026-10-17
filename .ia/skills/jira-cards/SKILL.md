@@ -75,7 +75,7 @@ Para pedidos como "um épico com 3 histórias":
 Para pedidos como "ponha a descrição no modelo em todas as subtarefas do TCI-258" ou "aplique o padrão da equipe nos épicos deste mês". Vale para qualquer tipo de card.
 
 1. **Selecione os cards** por chaves ou por JQL (`searchJiraIssuesUsingJql`). Mostre quantos são e a lista (chave, tipo, título). Com mais de 20, pergunte se limita o escopo.
-2. **Leia cada card** (`getJiraIssue`, `view: full` quando precisar dos customizados) e compare, campo a campo, com o que o usuário pediu ou com a auditoria (seção abaixo).
+2. **Leia cada card** (`getJiraIssue` com `view: full`; a visão `evidence` não traz `duedate` nem `components`) e compare, campo a campo, com o que o usuário pediu ou com a auditoria (seção abaixo).
 3. **Monte um plano único**: uma linha por card com os campos que mudam, no formato `campo: valor atual -> valor novo`. Cards já conformes ficam fora, em uma lista separada ("sem mudança").
 4. **Peça um único "sim"** para o plano inteiro. O usuário pode tirar cards ou campos do plano antes de confirmar.
 5. **Aplique** com `editJiraIssue`, um card por vez. Se uma edição falhar, **pare**, informe o que já foi alterado e o que faltou, e não reaplique os já alterados.
@@ -99,10 +99,11 @@ Para pedidos como "veja o que está fora do padrão" ou "audite os épicos". É 
    - convenções do tipo (por exemplo, datas de início e limite no Épico, prefixo `[ÁREA]` no título);
    - estrutura da descrição conforme `templates.md`, sem exigir texto que o usuário nunca escreveu;
    - pai coerente (Subtarefa com pai, História/Tarefa com épico ou sem, dentro da hierarquia).
-3. Os obrigatórios vêm da API (`getJiraIssueTypeMetaWithFields`), não só do `teams/<projeto>.md`.
-4. Apresente o relatório por card: o que está conforme, o que está fora e o que não dá para saber. Separe desvios **corrigíveis com valor padrão** (ex.: Cliente vazio e padrão Interno) dos que **dependem do usuário** (ex.: épico sem datas).
-5. Cards antigos, concluídos ou cancelados: informe os desvios, mas **não os inclua na proposta de correção** sem o usuário pedir. Podem ter sido criados antes do padrão atual.
-6. Ofereça transformar os desvios corrigíveis em um plano de edição em lote (fluxo acima). Nada é alterado antes do "sim".
+3. Os obrigatórios vêm da API (`getJiraIssueTypeMetaWithFields`, via `executeRead`, uma vez por **tipo** presente na seleção), não só do `teams/<projeto>.md`.
+4. **Leia os cards com `getJiraIssue` e `view: full`.** A visão `evidence` (também a do `searchJiraIssuesUsingJql`) **não devolve `duedate` nem `components`**, que fazem parte do padrão; auditar com ela deixa esses campos como "não deu para verificar". Use `searchJiraIssuesUsingJql` só para selecionar as chaves e `responseFields` para limitar o que a leitura completa devolve (ex.: `fields.duedate`, `fields.components`, `fields.customFields`).
+5. Apresente o relatório por card: o que está conforme, o que está fora e o que não dá para saber (diga o motivo, ex.: campo que a leitura não devolveu). Separe desvios **corrigíveis com valor padrão** (ex.: Cliente vazio e padrão Interno) dos que **dependem do usuário** (ex.: épico sem datas). Descrição com `A definir` ou texto genérico é sinalizada como pendência de conteúdo, não corrigida.
+6. Cards antigos, concluídos ou cancelados: informe os desvios, mas **não os inclua na proposta de correção** sem o usuário pedir. Podem ter sido criados antes do padrão atual.
+7. Ofereça transformar os desvios corrigíveis em um plano de edição em lote (fluxo acima). Nada é alterado antes do "sim".
 
 ## Fluxo: mudar status
 
