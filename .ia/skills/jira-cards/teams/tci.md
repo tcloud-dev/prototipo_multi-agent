@@ -11,7 +11,7 @@ Aplique estes valores quando o campo for obrigatório (ou presente no card model
 | Produto (lista) | `customfield_11391` | T-Cloud |
 | Cliente | `customfield_12848` | Interno |
 | Times Envolvidos (lista) | `customfield_11242` | T-Cloud Design |
-| Team | `customfield_10114` | T-Cloud Interface (id `d609020d-904d-46c5-95e3-3cbc5be185bc`). Padrão **inicial**: o time pode ser trocado depois da criação, então outro Team já preenchido não é desvio. Escrita testada em 2026-10-17 (TCI-290 a 292): passe o **id como texto simples**, `"d609020d-904d-46c5-95e3-3cbc5be185bc"` (não `{"id": ...}`), em `editJiraIssue`; na criação ainda não testado |
+| Team | `customfield_10114` | T-Cloud Interface (id `d609020d-904d-46c5-95e3-3cbc5be185bc`). Padrão **inicial**: o time pode ser trocado depois da criação, então outro Team já preenchido não é desvio. Escrita testada em 2026-10-17: passe o **id como texto simples**, `"d609020d-904d-46c5-95e3-3cbc5be185bc"` (não `{"id": ...}`), em `additional_fields` do `createJiraIssue` (Épico e Histórias TCI-299 a 301, releitura confirmou) e em `fields` do `editJiraIssue` (TCI-290 a 292). **Subtarefa herda o Team do pai:** não envie nem edite (o Jira recusa com "herda a atribuição da equipe do respectivo pai"; TCI-302) |
 | Componente | `components` | T-Cloud |
 | Prioridade | `priority` | Média |
 
@@ -46,7 +46,7 @@ Tipo e valor do Retorno Esperado **não têm padrão**: pergunte. Se o usuário 
 
 ## Subtarefa
 
-Só 5 campos **obrigatórios**: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Sem pai informado, não crie. Não envie os customizados de História (Tipo de demanda, Área, Produto, Cliente), componente nem prioridade. Validado com TCI-266 a 271.
+Só 5 campos **obrigatórios**: Resumo, Relator, Projeto, Tipo de item e **Pai** (chave de uma História ou Tarefa). Sem pai informado, não crie. Não envie os customizados de História (Tipo de demanda, Área, Produto, Cliente), Team (herdado do pai, a edição é recusada), componente nem prioridade. Validado com TCI-266 a 271.
 
 **Descrição:** a Subtarefa **aceita** descrição (testado em 2026-10-16, TCI-275, via `editJiraIssue`). Ao criar, use o modelo `## O que fazer` de `templates.md`, preenchido com o contexto que o usuário informar (pergunte qual é); sem conteúdo, `A definir`. Num lote, aplique a todas as subtarefas.
 
