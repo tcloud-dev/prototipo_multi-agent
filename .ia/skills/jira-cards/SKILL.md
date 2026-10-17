@@ -95,7 +95,7 @@ Para pedidos como "veja o que está fora do padrão" ou "audite os épicos". É 
 
 1. Selecione os cards (chaves ou JQL) e carregue `teams/<projeto>.md` e `templates.md`.
 2. Para cada card, confira o que a equipe define para o tipo:
-   - campos obrigatórios e padrões da tabela da equipe (Tipo de demanda, Área, Produto, Cliente, componente, Team etc.). A leitura `view: full` **omite campos vazios** (ex.: Team): campo da tabela ausente na resposta significa vazio, e vazio onde a tabela tem padrão é desvio corrigível com valor padrão. Padrão **inicial** (ex.: Team) pode ter sido trocado de propósito: valor diferente do padrão, mas preenchido, **não** é desvio;
+   - campos obrigatórios e padrões da tabela da equipe (Tipo de demanda, Área, Produto, Cliente, componente, Team etc.). A leitura `view: full` **omite campos vazios** (ex.: Team): campo da tabela ausente na resposta significa vazio, e vazio onde a tabela tem padrão é desvio corrigível com valor padrão. Padrão **inicial** (ex.: Team) pode ter sido trocado de propósito: valor diferente do padrão, mas preenchido, **não** é desvio. O Team só é conferido em Épico e História: a **Subtarefa herda o Team do pai** (o Jira recusa a edição), então nela não é desvio mesmo que a leitura `evidence` o mostre vazio;
    - convenções do tipo (por exemplo, datas de início e limite no Épico, prefixo `[ÁREA]` no título);
    - estrutura da descrição conforme `templates.md`, sem exigir texto que o usuário nunca escreveu;
    - pai coerente (Subtarefa com pai, História/Tarefa com épico ou sem, dentro da hierarquia).
