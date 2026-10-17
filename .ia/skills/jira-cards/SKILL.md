@@ -70,6 +70,40 @@ Para pedidos como "um épico com 3 histórias":
 1. Leia o card com `getJiraIssue` e mostre o valor atual dos campos que serão alterados.
 2. Confirme e aplique com `editJiraIssue`.
 
+## Fluxo: editar em lote
+
+Para pedidos como "ponha a descrição no modelo em todas as subtarefas do TCI-258" ou "aplique o padrão da equipe nos épicos deste mês". Vale para qualquer tipo de card.
+
+1. **Selecione os cards** por chaves ou por JQL (`searchJiraIssuesUsingJql`). Mostre quantos são e a lista (chave, tipo, título). Com mais de 20, pergunte se limita o escopo.
+2. **Leia cada card** (`getJiraIssue`, `view: full` quando precisar dos customizados) e compare, campo a campo, com o que o usuário pediu ou com a auditoria (seção abaixo).
+3. **Monte um plano único**: uma linha por card com os campos que mudam, no formato `campo: valor atual -> valor novo`. Cards já conformes ficam fora, em uma lista separada ("sem mudança").
+4. **Peça um único "sim"** para o plano inteiro. O usuário pode tirar cards ou campos do plano antes de confirmar.
+5. **Aplique** com `editJiraIssue`, um card por vez. Se uma edição falhar, **pare**, informe o que já foi alterado e o que faltou, e não reaplique os já alterados.
+6. **Releia** pelo menos um card alterado e confirme o resultado; a resposta do `editJiraIssue` nem sempre devolve os campos customizados e as datas.
+7. Termine com a lista de links dos cards alterados, dos que ficaram sem mudança e dos que foram pulados, com o motivo.
+
+Limites do lote:
+- Só edita campos; não deleta, não muda o tipo do card e não converte Tarefa em Subtarefa (ver Hierarquia).
+- Não troca o pai por um que o Jira recusa (por exemplo, História como pai de Tarefa). Se for o caso, informe e ofereça a alternativa.
+- Campo sem valor padrão e sem informação do usuário (responsável, labels, datas, contexto da descrição) **não é inventado**: pergunte uma vez para o lote ou deixe fora do plano.
+- A descrição só é reescrita com o que já existe nela ou com o que o usuário informar. Nunca descarte conteúdo existente para encaixar no modelo: preserve o texto atual dentro da seção adequada.
+- Ao mudar `duedate`, o Jira troca Classes de Serviço sozinho (Standard <-> Fixed Date). Avise no plano.
+
+## Regra: auditoria de padrão
+
+Para pedidos como "veja o que está fora do padrão" ou "audite os épicos". É **somente leitura**: gera um relatório e só vira edição se o usuário pedir.
+
+1. Selecione os cards (chaves ou JQL) e carregue `teams/<projeto>.md` e `templates.md`.
+2. Para cada card, confira o que a equipe define para o tipo:
+   - campos obrigatórios e padrões da tabela da equipe (Tipo de demanda, Área, Produto, Cliente, componente etc.);
+   - convenções do tipo (por exemplo, datas de início e limite no Épico, prefixo `[ÁREA]` no título);
+   - estrutura da descrição conforme `templates.md`, sem exigir texto que o usuário nunca escreveu;
+   - pai coerente (Subtarefa com pai, História/Tarefa com épico ou sem, dentro da hierarquia).
+3. Os obrigatórios vêm da API (`getJiraIssueTypeMetaWithFields`), não só do `teams/<projeto>.md`.
+4. Apresente o relatório por card: o que está conforme, o que está fora e o que não dá para saber. Separe desvios **corrigíveis com valor padrão** (ex.: Cliente vazio e padrão Interno) dos que **dependem do usuário** (ex.: épico sem datas).
+5. Cards antigos, concluídos ou cancelados: informe os desvios, mas **não os inclua na proposta de correção** sem o usuário pedir. Podem ter sido criados antes do padrão atual.
+6. Ofereça transformar os desvios corrigíveis em um plano de edição em lote (fluxo acima). Nada é alterado antes do "sim".
+
 ## Fluxo: mudar status
 
 1. Liste as transições com `listJiraIssueTransitions` (via `executeRead`); o status desejado pode não estar disponível a partir do status atual.
