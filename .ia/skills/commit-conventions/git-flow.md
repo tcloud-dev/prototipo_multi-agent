@@ -8,6 +8,8 @@
 | `env/hmg` | homologacao |
 | `env/dev` | desenvolvimento |
 
+Excecao: no repositorio `front-tcloud` a branch de producao e `master`, nao `main` (ver `profiles/front-tcloud.md`). Onde este documento diz `main`, leia a branch de producao do repositorio.
+
 Nunca commitar nem fazer push direto neles. A protecao tecnica no GitHub sera ativada pela equipe responsavel; ate la, a convencao vale por disciplina.
 
 ## Branches de trabalho (temporarios)
