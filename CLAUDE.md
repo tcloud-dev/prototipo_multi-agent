@@ -6,7 +6,7 @@ Protótipo de sistema multi-agent. Hoje há dois agentes (`jira-assistant` para 
 
 - **Decidido:** o repositório é multi-agent; cada agente tem uma responsabilidade e usa skills próprias, tudo em `.ia/` (fonte única).
 - **Em aberto (não assumir):** se haverá um agente orquestrador, quais agentes novos entram, como eles se comunicam e como o aviso periódico a usuários será entregue (hoje não há agendador nem canal de envio; ver `jira-assistant` abaixo). Pergunte ao usuário antes de criar agente ou orquestrador novo.
-- O plugin continua com o nome `atlassian-agent` em `.ia/.claude-plugin/plugin.json`; renomeá-lo muda o prefixo das skills e dos agentes (`atlassian-agent:jira-cards`), então só com pedido do usuário.
+- O plugin se chama `multi-agent` em `.ia/.claude-plugin/plugin.json` (antes `atlassian-agent`, renomeado a pedido do usuário em 2026-10-20); o nome é o prefixo das skills e dos agentes (`multi-agent:jira-cards`), então só renomear com pedido do usuário.
 
 ## Memória
 
