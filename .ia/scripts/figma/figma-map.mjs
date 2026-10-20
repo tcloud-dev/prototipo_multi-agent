@@ -26,6 +26,15 @@ import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
 import { collectFx } from './lib/fx.mjs';
 import { fileURLToPath } from 'node:url';
+import tls from 'node:tls';
+
+// Proxy corporativo (TOTVS) reassina o HTTPS com uma CA propria, instalada no repositorio de certificados do SO.
+// Confia nessas CAs alem das embutidas no Node (equivale a NODE_USE_SYSTEM_CA=1). Nao desliga a validacao.
+try {
+  tls.setDefaultCACertificates([...tls.getCACertificates('bundled'), ...tls.getCACertificates('system')]);
+} catch {
+  // Node sem essa API: use NODE_USE_SYSTEM_CA=1 ao rodar o comando.
+}
 
 // Raiz do repositorio (este arquivo fica em .ia/scripts/figma/): as saidas padrao nao dependem do diretorio de onde o comando roda.
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -51,7 +60,7 @@ const normalizeId = (id) => id.replace('-', ':');
 function loadTokenFile() {
   const file = join(homedir(), '.config', 'figma', '.env');
   if (process.env.FIGMA_TOKEN || !existsSync(file)) return;
-  if (statSync(file).mode & 0o077) console.error(`Aviso: ${file} e legivel por outros usuarios; rode chmod 600 nele.`);
+  if (process.platform !== 'win32' && statSync(file).mode & 0o077) console.error(`Aviso: ${file} e legivel por outros usuarios; rode chmod 600 nele.`);
   process.loadEnvFile(file);
 }
 
