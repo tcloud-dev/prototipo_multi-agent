@@ -1,6 +1,12 @@
 # prototipo_multi-agent
 
-Protótipo de agente para produtos da Atlassian (ex.: Jira). Repositório em fase inicial, sem código ainda.
+Protótipo de sistema multi-agent. Hoje há dois agentes (`jira-assistant` para Jira/Atlassian e `atomic-commits` para commits e PRs) e as skills que eles usam; a ideia é crescer para mais agentes por domínio, coordenados entre si. Nome anterior do repositório: `prototipo_agent_atlassian`.
+
+## Direção multi-agent
+
+- **Decidido:** o repositório é multi-agent; cada agente tem uma responsabilidade e usa skills próprias, tudo em `.ia/` (fonte única).
+- **Em aberto (não assumir):** se haverá um agente orquestrador, quais agentes novos entram, como eles se comunicam e como o aviso periódico a usuários será entregue (hoje não há agendador nem canal de envio; ver `jira-assistant` abaixo). Pergunte ao usuário antes de criar agente ou orquestrador novo.
+- O plugin continua com o nome `atlassian-agent` em `.ia/.claude-plugin/plugin.json`; renomeá-lo muda o prefixo das skills e dos agentes (`atlassian-agent:jira-cards`), então só com pedido do usuário.
 
 ## Memória
 
