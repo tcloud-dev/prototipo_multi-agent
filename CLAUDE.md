@@ -1,4 +1,4 @@
-# prototipo_agent_atlassian
+# prototipo_multi-agent
 
 Protótipo de agente para produtos da Atlassian (ex.: Jira). Repositório em fase inicial, sem código ainda.
 
