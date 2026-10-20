@@ -1,6 +1,6 @@
 {
-  "name": "atlassian-agent",
-  "description": "Skills para criar, editar e transicionar cards no Jira respeitando os campos obrigatórios de cada equipe.",
+  "name": "multi-agent",
+  "description": "Agentes e skills por domínio: Jira/Atlassian, commits e PRs, e leitura de design do Figma.",
   "version": "0.1.0",
   "author": { "name": "Johnny Souto" },
   "license": "MIT"
