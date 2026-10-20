@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Figma: JSON bruto da API (pode ser grande; consulta local, regeneravel)
+figma-data/*/raw/
