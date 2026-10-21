@@ -51,10 +51,13 @@ Pode ajustar o nome e a quebra dos arquivos de `pages/` ao conteúdo, mas manten
 
 Você **lista** o que exportar e roda o comando; não baixa arquivo à mão.
 
-1. Escreva `figma-data/<fileKey>/assets.json`: `{ "assets": [ { "id": "logo-branco", "node": "551:430", "category": "logos", "format": "svg" } ] }`. `id` e `category` em minúsculas com hífen; `format` `svg` (ícones e logos), `png` ou `jpg` (fotos e fundos); `scale` opcional (PNG/JPG, padrão 2).
+1. Escreva `figma-data/<fileKey>/assets.json`: `{ "assets": [ { "id": "logo-branco", "node": "551:430", "category": "logos", "format": "svg" }, { "id": "foto-hero", "node": "1:2", "category": "imagens", "format": "jpg", "mode": "original" } ] }`. `id` e `category` em minúsculas com hífen; `scale` opcional (só render PNG/JPG, padrão 2).
+   - **`mode` define como o arquivo é obtido, e errar aqui estraga a imagem:**
+   - **`"original"` para toda foto e imagem raster** (depoimentos, hero, ilustrações, prints de benchmark): o script **baixa o arquivo da imagem que foi colocada no design** (fill `IMAGE`), sem nada por cima. `format` (`png`/`jpg`) é só dica; o arquivo sai com a extensão real. Se o nó tiver mais de uma imagem, o script falha e lista os nós candidatos: aponte o nó da imagem.
+   - **`"render"` (padrão) só para vetor** (`svg`: ícones, logos, redes sociais): o Figma desenha o nó. **Nunca use render para foto**: o render inclui tudo que estiver sobre o nó (botão, selo, máscara) e inutiliza a imagem.
 2. Exporte: `node .ia/scripts/figma/figma-map.mjs assets --url <url>`. Não sobrescreve o que já existe (`--force` sobrescreve). Há **um manifesto só por arquivo**: asset novo entra nele; não crie manifestos paralelos. Código 1 se algum asset falhar; reporte quais.
 3. Entram: nós `VECTOR`/`COMPONENT`/`INSTANCE` cujo nome indique ícone ou logo reutilizável e fills `IMAGE` estruturais. Fontes só se não forem família padrão. Ícone dentro de outro componente: liste o nó isolado do ícone, nunca o da instância que o contém.
-4. Confira os arquivos (existem e têm tamanho maior que zero). SVG com raster embutido (`<image href="data:...">`) não é vetor: avise. Foto que parece de banco de imagem: exporte e avise que a licença é do dono.
+4. Confira os arquivos (existem e têm tamanho maior que zero). SVG com raster embutido (`<image href="data:...">`) não é vetor: avise. Foto que parece de banco de imagem: exporte e avise que a licença é do dono. Para as imagens `original`, confira que o arquivo é a foto limpa (veja o PNG de `refs/` ao lado, se precisar) e registre no `design-system.md` que veio do original.
 5. Registre em `design-system.md`, seção "Assets exportados": id, categoria, node de origem, caminho e onde o asset é usado.
 
 ## Coordenadas

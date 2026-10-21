@@ -8,7 +8,7 @@ const ok = (over = {}) => ({ id: 'logo-branco', node: '551:430', category: 'logo
 test('asset valido recebe formato svg, escala 1 e caminho categoria/id.ext', () => {
   const { assets, errors } = parseManifest({ assets: [ok()] });
   assert.deepEqual(errors, []);
-  assert.deepEqual(assets[0], { id: 'logo-branco', node: '551:430', category: 'logos', format: 'svg', scale: 1, file: 'logos/logo-branco.svg' });
+  assert.deepEqual(assets[0], { id: 'logo-branco', node: '551:430', category: 'logos', format: 'svg', scale: 1, mode: 'render', file: 'logos/logo-branco.svg' });
 });
 
 test('png sem escala usa 2x', () => {
@@ -63,4 +63,19 @@ test('versao otimizada (jpg -> webp) conta como ja existente; svg nao tem equiva
   const exists = (f) => f === 'images/foto.webp';
   assert.deepEqual(splitPending(assets, exists).skipped.map((a) => a.id), ['foto']);
   assert.deepEqual(splitPending(assets, exists).pending.map((a) => a.id), ['logo']);
+});
+
+test('mode original: formato padrao jpg, e nao entra nos pedidos de render', () => {
+  const { assets, errors } = parseManifest({ assets: [ok({ id: 'foto', category: 'imagens', mode: 'original' }), ok()] });
+  assert.deepEqual(errors, []);
+  assert.equal(assets[0].mode, 'original');
+  assert.equal(assets[0].format, 'jpg');
+  assert.deepEqual(planCalls(assets).flatMap((c) => c.assets.map((a) => a.id)), ['logo-branco']);
+});
+
+test('mode original com svg e mode desconhecido reprovam', () => {
+  const svg = parseManifest({ assets: [ok({ mode: 'original', format: 'svg' })] });
+  assert.match(svg.errors[0], /vetor usa mode "render"/);
+  const bad = parseManifest({ assets: [ok({ mode: 'print' })] });
+  assert.match(bad.errors[0], /mode "print"/);
 });
