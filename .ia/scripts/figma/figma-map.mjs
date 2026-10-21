@@ -25,6 +25,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
 import { collectFx } from './lib/fx.mjs';
+import { extOf, resolveOriginal } from './lib/originals.mjs';
 import { fileURLToPath } from 'node:url';
 import tls from 'node:tls';
 
@@ -348,7 +349,9 @@ async function cmdImage() {
 
 // ---------- assets (icones, logos, imagens) ----------
 // O manifesto `figma-data/<fileKey>/assets.json` (escrito pelo agente) diz o que exportar:
-//   { "assets": [ { "id": "logo-branco", "node": "551:430", "category": "logos", "format": "svg" } ] }
+//   { "assets": [ { "id": "logo-branco", "node": "551:430", "category": "logos", "format": "svg" },
+//                 { "id": "foto-hero", "node": "1:2", "category": "imagens", "format": "jpg", "mode": "original" } ] }
+//   mode "render" (padrao): o Figma desenha o no (icones, logos). mode "original": baixa o arquivo da imagem colocada no design (fotos), sem o que estiver por cima dela.
 // Cada arquivo vai para figma-data/<fileKey>/assets/<categoria>/<id>.<formato>. Nao sobrescreve arquivo que ja existe (use --force). Sai com 1 se algum asset falhar.
 async function cmdAssets() {
   const key = fileKeyOf(opt('url'));
@@ -370,6 +373,37 @@ async function cmdAssets() {
   const { pending, skipped } = splitPending(assets, (file) => existsSync(join(out, file)), rest.includes('--force'));
   skipped.forEach((a) => console.log(`PULOU  ${a.file.padEnd(34)} ${a.node} (ja existe; --force para sobrescrever)`));
   let failed = 0;
+  // mode "original": baixa o arquivo da imagem colocada no design (fill IMAGE), sem o que estiver por cima dela.
+  const originals = pending.filter((a) => a.mode === 'original');
+  if (originals.length) {
+    const imageUrls = (await api(`/files/${key}/images`)).meta?.images ?? {};
+    for (let i = 0; i < originals.length; i += 20) {
+      const batch = originals.slice(i, i + 20);
+      const data = await api(`/files/${key}/nodes?ids=${encodeURIComponent(batch.map((a) => a.node).join(','))}&depth=6`);
+      for (const a of batch) {
+        const doc = data.nodes?.[a.node]?.document;
+        const picked = doc ? resolveOriginal(doc) : { error: 'no nao encontrado' };
+        const url = picked.imageRef ? imageUrls[picked.imageRef] : null;
+        if (!url) {
+          failed++;
+          console.log(`FALTA  ${a.file.padEnd(34)} ${a.node} (${picked.error ?? 'o Figma nao devolveu a URL da imagem original'})`);
+          continue;
+        }
+        const res = await fetch(url); // URL pre-assinada de curta duracao: sem o token
+        if (!res.ok) {
+          failed++;
+          console.log(`FALHA  ${a.file.padEnd(34)} ${a.node} (download ${res.status})`);
+          continue;
+        }
+        const bytes = Buffer.from(await res.arrayBuffer());
+        const ext = extOf(bytes) ?? a.format;
+        const file = join(out, a.category, `${a.id}.${ext}`);
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, bytes);
+        console.log(`OK     ${`${a.category}/${a.id}.${ext}`.padEnd(34)} ${a.node} (original${picked.source !== a.node ? `, no ${picked.source}` : ''}${ext !== a.format ? `; formato real ${ext}, manifesto dizia ${a.format}` : ''})`);
+      }
+    }
+  }
   for (const call of planCalls(pending)) {
     const ids = call.assets.map((a) => a.node).join(',');
     const data = await api(`/images/${key}?ids=${encodeURIComponent(ids)}&format=${call.format}&scale=${call.scale}`);
