@@ -2,10 +2,11 @@
 // (a API de imagens do Figma recebe um formato por chamada). Sem rede e sem disco: so decisao.
 export const FORMATS = ['svg', 'png', 'jpg'];
 const MAX_IDS_PER_CALL = 40;
+const MODES = ['render', 'original'];
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
 const NODE = /^I?\d+:\d+(;\d+:\d+)*$/;
 
-// Devolve { assets, errors }. Cada asset: { id, node, category, format, scale, file }.
+// Devolve { assets, errors }. Cada asset: { id, node, category, format, scale, mode, file }.
 export function parseManifest(manifest) {
   const errors = [];
   const list = Array.isArray(manifest?.assets) ? manifest.assets : null;
@@ -14,8 +15,13 @@ export function parseManifest(manifest) {
   const assets = [];
   for (const [i, raw] of list.entries()) {
     const where = `assets[${i}]${raw?.id ? ` (${raw.id})` : ''}`;
-    const format = raw.format ?? 'svg';
+    // mode "render": o Figma desenha o no (vetores: icones, logos). mode "original": baixa o arquivo da imagem
+    // colocada no design (fotos); o render de foto sai com o que estiver por cima dela (botao, selo).
+    const mode = raw.mode ?? 'render';
+    const format = raw.format ?? (mode === 'original' ? 'jpg' : 'svg');
     const scale = raw.scale ?? (format === 'svg' ? 1 : 2);
+    if (!MODES.includes(mode)) errors.push(`${where}: mode "${mode}" fora de ${MODES.join('/')}`);
+    if (mode === 'original' && format === 'svg') errors.push(`${where}: mode "original" e para imagem raster (png/jpg); vetor usa mode "render"`);
     if (!SLUG.test(raw.id ?? '')) errors.push(`${where}: id deve ser minusculo com hifen (ex.: logo-branco)`);
     if (!NODE.test(raw.node ?? '')) errors.push(`${where}: node invalido "${raw.node}" (esperado 123:456)`);
     if (!SLUG.test(raw.category ?? '')) errors.push(`${where}: category deve ser minuscula com hifen (ex.: icons, logos, images)`);
@@ -24,15 +30,15 @@ export function parseManifest(manifest) {
     const file = `${raw.category}/${raw.id}.${format}`;
     if (seen.has(file)) errors.push(`${where}: arquivo duplicado ${file}`);
     seen.add(file);
-    assets.push({ id: raw.id, node: raw.node, category: raw.category, format, scale, file });
+    assets.push({ id: raw.id, node: raw.node, category: raw.category, format, scale, mode, file });
   }
   return { assets, errors };
 }
 
-// Pedidos para a API: um por (formato, escala), com os ids em lotes.
+// Pedidos para a API de render: um por (formato, escala), com os ids em lotes. Assets "original" nao passam por aqui.
 export function planCalls(assets) {
   const groups = new Map();
-  for (const a of assets) {
+  for (const a of assets.filter((x) => x.mode !== 'original')) {
     const key = `${a.format}@${a.format === 'svg' ? 1 : a.scale}`;
     if (!groups.has(key)) groups.set(key, { format: a.format, scale: a.format === 'svg' ? 1 : a.scale, assets: [] });
     groups.get(key).assets.push(a);
