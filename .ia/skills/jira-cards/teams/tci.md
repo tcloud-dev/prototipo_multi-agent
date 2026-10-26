@@ -7,7 +7,7 @@ Aplique estes valores quando o campo for obrigatório (ou presente no card model
 | Campo | ID | Padrão |
 |---|---|---|
 | Tipo de demanda | `customfield_11369` | Iniciativa |
-| Área solicitante | `customfield_11370` | T-Cloud Design |
+| Área solicitante | `customfield_11370` | T-Cloud Design (**não vale para Bug**: ver seção Bug) |
 | Produto (lista) | `customfield_11391` | T-Cloud |
 | Cliente | `customfield_12848` | Interno |
 | Times Envolvidos (lista) | `customfield_11242` | T-Cloud Design |
@@ -59,9 +59,15 @@ Só 5 campos **obrigatórios**: Resumo, Relator, Projeto, Tipo de item e **Pai**
 - Converter Tarefa em Subtarefa usa o "Mover" do Jira: o status vai de Aberto para "Análise de viabilidade" e são descartados Produto, Área solicitante, Tipo de demanda, Cliente, Link Epic, Classificação e Classes de Serviço. Prefira criar a Subtarefa nova.
 - Registro opcional da ligação Tarefa -> História, quando a Tarefa fica no épico: "Relacionada a TCI-xxx" na descrição. Tipos de link existentes (`Relates`, `Polaris work item link`) não foram adotados; não crie link sem o time decidir.
 
+## Bug
+
+A **Área solicitante** (`customfield_11370`) do Bug **não tem padrão**: é o departamento que reportou o bug, e "T-Cloud Design" (padrão de História) **não existe** nas opções do Bug (recusado em 2026-10-26, TCI-457). Pergunte sempre qual departamento reportou. Exemplos de uso: `T-Cloud Core` (id 11659), `User Experience` (id 12915), `T-Cloud Sustentação` (id 13535). Passe pelo **id** (`{"id": "11659"}`) em `additional_fields`; os demais valores vêm dos `allowedValues` da API.
+
+Demais campos do Bug seguem a tabela de padrões (Tipo de demanda, Produto, Cliente). Estimativa original (`timetracking`) aceita na criação. Bug pode ser filho de Épico (`parent`, testado com TCI-105 -> TCI-457); suas Subtarefas seguem a seção Subtarefa.
+
 ## Sem padrão (perguntar)
 
-Responsável, labels, datas e a história de referência de uma tarefa.
+Responsável, labels, datas, a história de referência de uma tarefa e a Área solicitante do Bug.
 
 ## Convenções de título
 
