@@ -19,6 +19,7 @@
 // ~/.config/figma/.env (fora do repositorio, chmod 600), com a linha FIGMA_TOKEN=...
 // (Figma > Settings > Security > Personal access tokens, escopo file_content:read).
 // Nunca grave o token em arquivo do repositorio.
+import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -26,7 +27,6 @@ import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
 import { collectFx } from './lib/fx.mjs';
 import { extOf, resolveOriginal } from './lib/originals.mjs';
-import { fileURLToPath } from 'node:url';
 import tls from 'node:tls';
 
 // Proxy corporativo (TOTVS) reassina o HTTPS com uma CA propria, instalada no repositorio de certificados do SO.
@@ -37,8 +37,15 @@ try {
   // Node sem essa API: use NODE_USE_SYSTEM_CA=1 ao rodar o comando.
 }
 
-// Raiz do repositorio (este arquivo fica em .ia/scripts/figma/): as saidas padrao nao dependem do diretorio de onde o comando roda.
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// Raiz do repositorio que esta usando o script (nao a do script: instalado como plugin, ele fica no cache do Claude Code).
+// Vem do git a partir do diretorio atual; fora de um repositorio git, usa o diretorio atual.
+const REPO_ROOT = (() => {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return process.cwd();
+  }
+})();
 const dataDir = (key, ...sub) => join(REPO_ROOT, 'figma-data', key, ...sub);
 const [command, ...rest] = process.argv.slice(2);
 const opt = (name, fallback) => {
