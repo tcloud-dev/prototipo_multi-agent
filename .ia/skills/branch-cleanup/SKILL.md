@@ -5,7 +5,7 @@ description: Apaga, local e remoto, os branches de trabalho (feat, fix, bugfix, 
 
 # branch-cleanup
 
-Idioma da conversa: portugues (BR). Fluxo de branches em `.ia/skills/commit-conventions/git-flow.md`.
+Idioma da conversa: portugues (BR). Fluxo de branches em `${CLAUDE_PLUGIN_ROOT}/skills/commit-conventions/git-flow.md`.
 
 ## Regras
 
