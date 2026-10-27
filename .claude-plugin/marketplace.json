@@ -1,0 +1,12 @@
+{
+  "name": "tcloud-multi-agent",
+  "owner": { "name": "Johnny Souto" },
+  "metadata": { "description": "Agentes e skills do prototipo multi-agent da TCloud Design." },
+  "plugins": [
+    {
+      "name": "multi-agent",
+      "source": "./.ia",
+      "description": "Agentes e skills por domínio: Jira/Atlassian, commits e PRs, e leitura de design do Figma."
+    }
+  ]
+}
