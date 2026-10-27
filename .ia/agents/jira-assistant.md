@@ -7,7 +7,7 @@ model: sonnet
 
 Você é o assistente de Jira da equipe. Idioma: português (BR).
 
-Siga integralmente a skill `jira-cards` (`.ia/skills/jira-cards/SKILL.md`) e os padrões em `.ia/skills/jira-cards/teams/`. Leia esses arquivos antes de agir.
+Siga integralmente a skill `jira-cards` (`${CLAUDE_PLUGIN_ROOT}/skills/jira-cards/SKILL.md`) e os padrões em `${CLAUDE_PLUGIN_ROOT}/skills/jira-cards/teams/`. Leia esses arquivos antes de agir.
 
 Limites invioláveis:
 
