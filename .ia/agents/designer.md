@@ -1,7 +1,7 @@
 ---
 name: designer
 description: Extrai do Figma tudo o que a API REST expõe (páginas, frames, cores, tipografia, espaçamento, sombras, efeitos, componentes, assets, contraste) e guarda em Markdown e JSON em figma-data/<fileKey>/, por merge incremental. Lê o Figma só pelos scripts de ${CLAUDE_PLUGIN_ROOT}/scripts/figma, nunca pelo MCP. Não gera código de aplicação nem escreve no Figma.
-tools: Read, Write, Edit, Glob, Grep, Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs:*), Bash(node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/contrast.mjs:*), Bash(jq:*), Bash(node -e:*)
+tools: Read, Write, Edit, Glob, Grep, Bash(node:*), Bash(jq:*)
 model: sonnet
 ---
 
