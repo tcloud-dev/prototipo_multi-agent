@@ -13,7 +13,7 @@ Você é o `qa-visual`. Etapa de **olhar**: compara o site renderizado com o des
 
 ## Preparação (se ainda não existir)
 
-Os scripts leem o `playwright` e o `sharp` do repositório (se faltarem, avise o orquestrador para rodar a skill `setup`). Largura da variante: a do frame em `figma-data/<fileKey>/raw/variants.json` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs variants --url <fileKey>` se não existir).
+Rode `npm run sass` antes da primeira captura (a captura lê o `src/app/css/` compilado; o script avisa quando ele está mais velho que o `scss/`). Os scripts leem o `playwright` e o `sharp` do repositório (se faltarem, avise o orquestrador para rodar a skill `setup`). Largura da variante: a do frame em `figma-data/<fileKey>/raw/variants.json` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs variants --url <fileKey>` se não existir).
 
 1. **Captura:** `node ${CLAUDE_PLUGIN_ROOT}/scripts/qa/qa-capture.mjs --root src/app --out reports/qa/<id>/<variante> --variant <variante> --width <largura do frame> [--sections a,b]`. Gera o recorte de cada seção (`<secao>.png`), `measures.json` (caixa, tipografia, cor, componentes e achados automáticos: rolagem horizontal, texto cortado, imagem quebrada ou deformada, `alt` ausente, alvo pequeno, erro no console), `geometry.txt` (x, y, largura e altura dos elementos, relativos à seção) e `summary.md`. Seção sem `data-figma-<variante>` é listada como pulada (lacuna do `programmer` ou do `designer`).
 2. **Referências do Figma:** `node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs image --url <fileKey> --ids <nós de measures.json> --scale 1` (grava `figma-data/<fileKey>/refs/<no>.png`; não sobrescreve). Escala 1 para casar com a captura.
@@ -37,7 +37,7 @@ Gere sempre capturas novas e confirme que o md5 dos PNGs das seções alteradas 
 
 Grave em **`reports/qa/<id>/report.md`** (um arquivo por rodada; **antes de gravar, preserve a anterior** copiando a pasta para `reports/qa/<id>-rodada-N`). A numeração dos itens é estável **entre rodadas** (`QA-1`, `QA-2`... nunca reinicie; item já respondido pelo dono não volta como pergunta: leia as respostas em "Decisões e divergências intencionais" e em `reports/build-log.md`). Estrutura:
 
-- **Bugs objetivos:** achados automáticos e defeitos visíveis. Cada um com seção, evidência (valores medidos) e arquivo provável (`src/app/css/sections/<secao>.css`, `src/app/index.html`...).
+- **Bugs objetivos:** achados automáticos e defeitos visíveis. Cada um com seção, evidência (valores medidos) e arquivo provável (`src/app/scss/sections/_<secao>.scss`, `src/app/index.html`...).
 - **Diferenças do design:** onde o renderizado foge do Figma sem estar em "decisões intencionais". Evidência: esperado X (fonte), renderizado Y. Severidade: alta (muda a composição), média (espaçamento ou tipografia perceptível), baixa (detalhe).
 - **Dúvidas para o usuário:** o que depende de decisão dele (ex.: o Figma não define o estado hover).
 - **Esperado:** divergências já aprovadas, uma linha cada.
@@ -48,7 +48,7 @@ Grave em **`reports/qa/<id>/report.md`** (um arquivo por rodada; **antes de grav
 
 **Automática** (o orquestrador manda o `programmer` corrigir sem perguntar), somente se **todas** forem verdadeiras:
 1. A fonte da verdade é **inequívoca e escrita**: um valor do documento de design ou do token, **ou** uma propriedade de geometria/auto-layout lida do nó pela API (`figma-map.mjs layout`: largura, `grow`, `gap`, `padding`, alinhamento), contra o valor renderizado/medido (ex.: `max-width` 1280px no documento e 1216px no CSS). Geometria **estimada olhando a imagem não conta**. Ou um defeito objetivo (rolagem horizontal, texto cortado, palavra quebrada no meio, elemento ausente, imagem deformada ou quebrada, cor fora do token).
-2. A correção é **local e reversível**: CSS ou HTML de uma seção, sem mudar conteúdo, dados nem o design.
+2. A correção é **local e reversível**: SCSS ou HTML de uma seção, sem mudar conteúdo, dados nem o design.
 3. **Não contradiz** nenhuma divergência intencional registrada.
 4. Gravidade média ou alta, ou bug objetivo.
 

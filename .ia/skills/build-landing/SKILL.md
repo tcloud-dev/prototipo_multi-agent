@@ -1,6 +1,6 @@
 ---
 name: build-landing
-description: Conduz o fluxo completo para criar uma landing page em HTML5, CSS3 e JavaScript a partir de um design do Figma (designer → programmer → qa-visual → minifier), com src/app/ como código e dist/app/ como versão otimizada. Retomável - descobre a etapa pelos artefatos. Use quando pedirem para criar, continuar ou retomar uma landing page.
+description: Conduz o fluxo completo para criar uma landing page em HTML5, CSS3 (via SCSS) e JavaScript a partir de um design do Figma (designer → programmer → qa-visual → minifier), com src/app/ como código e dist/app/ como versão otimizada. Retomável - descobre a etapa pelos artefatos. Use quando pedirem para criar, continuar ou retomar uma landing page.
 argument-hint: <url do Figma (/design/)>
 ---
 
@@ -28,7 +28,7 @@ Execute **só** a etapa indicada e volte à tabela. Nunca pule etapa, nunca rode
 1. **designer** (`multi-agent:designer`): extrai o arquivo para `figma-data/<fileKey>/`, incluindo variantes, assets e a seção "Contraste". Esta etapa só termina com `check` limpo **e** as medidas de **todas** as variantes do brief (sem elas o `programmer` inventaria valores e o QA consertaria tudo depois). **Portão:** se houver pares de contraste reprovados, leve a lista ao usuário antes do `programmer` (a cor é do design; a decisão é dele) e repasse as trocas aprovadas.
 2. **programmer** (`multi-agent:programmer`): gera `src/app/`. Passe só o `fileKey`, as seções e o conteúdo do brief; ele lê o resto. Avise o usuário antes quando houver mais de 3 seções (é a etapa mais cara).
 3. **qa-visual:** siga a skill `qa-visual` (laço de até 3 rodadas, com portão do usuário).
-4. **minifier** (`multi-agent:minifier`): `npm run build` gera `dist/app/` (minificado e com mídia otimizada) e confere que renderiza igual ao `src/app/`. Falha de build volta ao `programmer` (e depois ao QA das seções tocadas); no máximo 2 ciclos, depois pare e reporte.
+4. **minifier** (`multi-agent:minifier`): `npm run build` gera `dist/app/` (SCSS compilado, tudo minificado e com mídia otimizada) e confere que renderiza igual ao `src/app/`. Falha de build volta ao `programmer` (e depois ao QA das seções tocadas); no máximo 2 ciclos, depois pare e reporte.
 5. **Pronto:** relate.
 
 ## Regras
