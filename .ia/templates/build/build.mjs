@@ -5,10 +5,12 @@
 //   node scripts/build.mjs [--src src/app] [--out dist/app] [--no-media] [--max-width 2560] [--quality 80]
 //
 // HTML  -> html-minifier-terser   CSS/JS -> esbuild (transform por arquivo, sem bundle: os caminhos continuam iguais)
+// SCSS  -> sass: cada <src>/scss/<nome>.scss (sem prefixo _) vira <out>/css/<nome>.css minificado; a pasta scss/ nao vai para o out
+//          e um css/<nome>.css compilado que esteja em <src> e ignorado (o compilado de agora vence).
 // Imagens (jpg/png/webp/avif) -> sharp (mesmo formato e nome, so recomprime e limita a largura)
 // SVG -> svgo   Videos (mp4/webm) -> ffmpeg-static   Demais arquivos (fontes, json, ico...) -> copia
 // No fim confere que toda referencia local (href/src/poster/srcset) do HTML e do CSS existe em dist/.
-// Dependencias (devDependencies do consumidor): esbuild html-minifier-terser sharp svgo ffmpeg-static
+// Dependencias (devDependencies do consumidor): esbuild html-minifier-terser sharp svgo ffmpeg-static sass
 // Saida 0 = ok; 1 = falha (arquivo que nao processou ou referencia quebrada).
 
 import { readdir, readFile, writeFile, mkdir, rm, copyFile, stat } from 'node:fs/promises';
@@ -37,7 +39,7 @@ async function need(name) {
     const mod = await import(name);
     return mod.default ?? mod;
   } catch {
-    console.error(`Falta a dependencia "${name}". Rode: npm i -D esbuild html-minifier-terser sharp svgo ffmpeg-static`);
+    console.error(`Falta a dependencia "${name}". Rode: npm i -D esbuild html-minifier-terser sharp svgo ffmpeg-static sass`);
     process.exit(1);
   }
 }
@@ -98,8 +100,13 @@ async function main() {
   const { optimize: svgo } = SKIP_MEDIA ? {} : await need('svgo');
   const ffmpeg = SKIP_MEDIA ? null : (await import('ffmpeg-static').then((m) => m.default).catch(() => null));
 
+  const scssDir = join(SRC, 'scss');
+  const scssEntries = existsSync(scssDir) ? (await readdir(scssDir)).filter((f) => f.endsWith('.scss') && !f.startsWith('_')) : [];
+  const sass = scssEntries.length ? await need('sass') : null;
+  const generated = new Set(scssEntries.map((f) => join(SRC, 'css', f.replace(/\.scss$/, '.css'))));
+
   await rm(OUT, { recursive: true, force: true });
-  const files = await walk(SRC);
+  const files = (await walk(SRC)).filter((f) => !f.startsWith(scssDir + sep) && !generated.has(f));
 
   await pool(files, 4, async (file) => {
     const rel = relative(SRC, file);
@@ -125,7 +132,7 @@ async function main() {
         const { code } = await esbuild.transform(await readFile(file, 'utf8'), { loader: 'css', minify: true });
         await writeFile(dest, code);
       } else if (ext === '.js' || ext === '.mjs') {
-        const { code } = await esbuild.transform(await readFile(file, 'utf8'), { loader: 'js', minify: true, target: 'es2020' });
+        const { code } = await esbuild.transform(await readFile(file, 'utf8'), { loader: 'js', minify: true, target: 'es2022' });
         await writeFile(dest, code);
       } else if (!SKIP_MEDIA && IMG.has(ext)) {
         const img = sharp(file, { animated: true }).rotate();
@@ -154,6 +161,19 @@ async function main() {
     }
     add(ext.slice(1) || 'outros', before, (await stat(dest)).size);
   });
+
+  for (const entry of scssEntries) {
+    const dest = join(OUT, 'css', entry.replace(/\.scss$/, '.css'));
+    try {
+      const { css } = sass.compile(join(scssDir, entry), { quietDeps: true }); // expandido: base de comparacao do "antes"
+      const { code } = await esbuild.transform(css, { loader: 'css', minify: true });
+      await mkdir(dirname(dest), { recursive: true });
+      await writeFile(dest, code);
+      add('scss', Buffer.byteLength(css), Buffer.byteLength(code));
+    } catch (e) {
+      failures.push(`scss/${entry}: ${String(e.message).split('\n')[0]}`);
+    }
+  }
 
   const broken = await checkReferences(OUT);
 
