@@ -1,6 +1,6 @@
 {
   "name": "multi-agent",
-  "description": "Agentes e skills por domínio: Jira/Atlassian, commits e PRs, e leitura de design do Figma.",
+  "description": "Agentes e skills por domínio: Jira/Atlassian, commits e PRs, leitura de design do Figma e criação de landing page (HTML5, CSS3, JavaScript) com QA visual e build otimizado.",
   "version": "0.1.0",
   "author": { "name": "Johnny Souto" },
   "license": "MIT"
