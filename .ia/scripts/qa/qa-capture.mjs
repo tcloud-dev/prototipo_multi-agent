@@ -10,7 +10,7 @@
 
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
-import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises';
 import { join, extname, resolve, normalize, sep } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -43,6 +43,18 @@ function serve() {
     }
   });
   return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
+}
+
+// Data do arquivo mais novo de uma pasta (0 se nao existir).
+async function newest(dir) {
+  let max = 0;
+  try {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      max = Math.max(max, e.isDirectory() ? await newest(p) : (await stat(p)).mtimeMs);
+    }
+  } catch {}
+  return max;
 }
 
 async function launch(playwright) {
@@ -161,6 +173,7 @@ async function main() {
   }
 
   const pageFindings = [];
+  if ((await newest(join(root, 'scss'))) > (await newest(join(root, 'css'))) && (await newest(join(root, 'scss'))) > 0) pageFindings.push('css/ mais antigo que scss/: rode `npm run sass` e capture de novo (a captura reflete o CSS antigo)');
   if (result.page.scrollWidth > result.page.innerWidth) pageFindings.push(`rolagem horizontal na pagina (${result.page.scrollWidth}px > ${result.page.innerWidth}px)`);
   if (!result.page.lang) pageFindings.push('<html> sem lang');
   result.consoleErrors.forEach((e) => pageFindings.push(`erro no console: ${e.slice(0, 160)}`));
