@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-// Build de producao de uma landing page estatica: src/app/ -> dist/app/.
-// Copiado para o repositorio consumidor (scripts/build.mjs) pela skill `setup` e usado igual no GitHub Actions.
+// PONTO DE PARTIDA (starter) de build para uma landing page estatica HTML/SCSS/JS: src/app/ -> dist/app/.
+// O plugin multi-agent nao exige este script: o contrato e o script `build` do package.json do repositorio.
+// A skill `setup` so oferece esta copia (scripts/build.mjs) se o projeto nao tiver build, depois que o usuario aceita.
+// Depois de copiado, o script e DO REPOSITORIO: ajuste a vontade. O GitHub Actions do deploy roda o mesmo `npm run build`.
 //
 //   node scripts/build.mjs [--src src/app] [--out dist/app] [--no-media] [--max-width 2560] [--quality 80]
+// Sem --src/--out, usa a chave "multiAgent" do package.json (ou multi-agent.config.json); sem ela, src/app e dist/app.
 //
 // HTML  -> html-minifier-terser   CSS/JS -> esbuild (transform por arquivo, sem bundle: os caminhos continuam iguais)
 // SCSS  -> sass: cada <src>/scss/<nome>.scss (sem prefixo _) vira <out>/css/<nome>.css minificado; a pasta scss/ nao vai para o out
@@ -16,7 +19,7 @@
 import { readdir, readFile, writeFile, mkdir, rm, copyFile, stat } from 'node:fs/promises';
 import { join, extname, relative, dirname, resolve, sep } from 'node:path';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -25,8 +28,18 @@ const opt = (name, def) => {
 };
 const flag = (name) => args.includes(`--${name}`);
 
-const SRC = resolve(opt('src', 'src/app'));
-const OUT = resolve(opt('out', 'dist/app'));
+function repoConfig() {
+  for (const [file, pick] of [['package.json', (j) => j.multiAgent], ['multi-agent.config.json', (j) => j]]) {
+    try {
+      const c = pick(JSON.parse(readFileSync(file, 'utf8')));
+      if (c && typeof c === 'object') return c;
+    } catch {}
+  }
+  return {};
+}
+const cfg = repoConfig();
+const SRC = resolve(opt('src', cfg.src ?? 'src/app'));
+const OUT = resolve(opt('out', cfg.out ?? 'dist/app'));
 const MAX_WIDTH = Number(opt('max-width', 2560));
 const QUALITY = Number(opt('quality', 80));
 const SKIP_MEDIA = flag('no-media');

@@ -1,6 +1,6 @@
 ---
 name: build-landing
-description: Conduz o fluxo completo para criar uma landing page a partir do Figma (designer, programmer, qa-visual, minifier). Use quando pedirem para criar, continuar ou retomar uma landing page.
+description: Conduz o fluxo completo para criar uma landing page a partir do Figma (designer, programmer, qa-visual, build-check). Use quando pedirem para criar, continuar ou retomar uma landing page.
 ---
 
 # build-landing (referencia)

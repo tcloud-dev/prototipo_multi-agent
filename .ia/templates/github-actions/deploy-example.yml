@@ -1,0 +1,42 @@
+# EXEMPLO de workflow de deploy, para copiar e adaptar em `.github/workflows/` do repositorio consumidor.
+# Nao e instalado pelo plugin e nao foi executado: o provedor de hospedagem e decisao de cada projeto.
+# Ideia: o deploy roda o MESMO `npm run build` que o desenvolvedor roda (o contrato do plugin) e publica a pasta `out`.
+# A pasta de saida e lida de `multiAgent.out` do package.json (se a configuracao estiver em multi-agent.config.json, troque o passo `out`).
+# Este exemplo publica no GitHub Pages; troque os dois ultimos passos pelo seu provedor.
+name: deploy
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Pasta de saida (multiAgent.out do package.json; padrao dist/app)
+        id: out
+        run: echo "dir=$(node -p "(require('./package.json').multiAgent||{}).out||'dist/app'")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.out.outputs.dir }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

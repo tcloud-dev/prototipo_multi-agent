@@ -5,7 +5,7 @@ description: Estrutura e contrato da landing page estática em HTML5, SCSS e Jav
 
 # landing-page
 
-Visão geral e contrato do código em `src/app/`. O detalhe de cada tecnologia está nas skills **`html5`**, **`css3`** (SCSS, com `scss-guide.md`) e **`javascript-es`**: carregue a que a tarefa pede. Neutra de fornecedor. Idioma do código: inglês; textos da página: o que o brief disser.
+Visão geral e contrato do código em `src/app/` (padrão; o caminho real vem de `node ${CLAUDE_PLUGIN_ROOT}/scripts/config/ma-config.mjs`, campo `src`). O detalhe de cada tecnologia está nas skills **`html5`**, **`css3`** (SCSS, com `scss-guide.md`) e **`javascript-es`**: carregue a que a tarefa pede. Neutra de fornecedor. Idioma do código: inglês; textos da página: o que o brief disser.
 
 ## Estrutura
 
@@ -40,4 +40,4 @@ Imagem com `width`/`height`, `loading="lazy"` fora da primeira dobra e herói co
 
 ## Fora do escopo desta skill
 
-Minificação, compilação de produção, otimização de mídia e deploy são do agente `minifier` e do `scripts/build.mjs` do repositório. Comparação com o Figma é do `qa-visual`.
+Minificação, compilação de produção, otimização de mídia e deploy são do **repositório consumidor** (o script `build` do `package.json`, o mesmo que o deploy roda); o agente `build-check` só o executa e confere. O plugin não minifica nada. Comparação com o Figma é do `qa-visual`.

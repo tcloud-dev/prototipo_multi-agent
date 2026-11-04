@@ -1,6 +1,6 @@
 ---
 name: build-landing
-description: Conduz o fluxo completo para criar uma landing page em HTML5, CSS3 (via SCSS) e JavaScript a partir de um design do Figma (designer → programmer → qa-visual → minifier), com src/app/ como código e dist/app/ como versão otimizada. Retomável - descobre a etapa pelos artefatos. Use quando pedirem para criar, continuar ou retomar uma landing page.
+description: Conduz o fluxo completo para criar uma landing page a partir de um design do Figma (designer → programmer → qa-visual → build-check). Hoje a stack suportada é HTML5, CSS3 (via SCSS) e JavaScript puros; o código fica em `src` e o build de produção é o do próprio repositório. Retomável - descobre a etapa pelos artefatos. Use quando pedirem para criar, continuar ou retomar uma landing page.
 argument-hint: <url do Figma (/design/)>
 ---
 
@@ -10,25 +10,27 @@ Você é o orquestrador, na sessão principal. Os agentes não falam com o usuá
 
 ## Descobrir a etapa (retomável)
 
+Leia a configuração do repositório: `node ${CLAUDE_PLUGIN_ROOT}/scripts/config/ma-config.mjs` (JSON com `stack`, `src`, `out`, `scripts.build`; padrões `src/app` e `dist/app`). Daqui em diante, `src` e `out` são esses valores, não os padrões. Saída 1 = configuração inválida: mostre os erros ao usuário e pare.
+
 Confira, nesta ordem, o primeiro que **não** existir; é onde você está:
 
 | Artefato | Se faltar |
 |---|---|
 | `reports/brief.md` | **Brief** |
 | `figma-data/<fileKey>/index.json` e `design-system.md` (com as variantes do brief) | **designer** |
-| `src/app/index.html` (todas as seções do brief) | **programmer** |
+| `<src>/index.html` (todas as seções do brief) | **programmer** |
 | `reports/qa/<id>/report.md` sem item aberto | **qa-visual** (laço de ajustes) |
-| `dist/app/` mais novo que `src/app/` e `reports/build-log.md` com o build | **minifier** |
+| `<out>/` mais novo que `<src>/` e `reports/build-log.md` com o build (ou o log dizendo que o projeto não define build) | **build-check** |
 
 Execute **só** a etapa indicada e volte à tabela. Nunca pule etapa, nunca rode duas em paralelo.
 
 ## Etapas
 
-0. **Brief:** pergunte e grave em `reports/brief.md`, sem inventar: URL do Figma (`/design/`; arquivo `/site/` não é lido pela API), variantes no escopo (desktop; mobile; dark), idioma (`<html lang>`), texto **final** ou **placeholder** (nesse caso a página não vai a produção como está) e seções a gerar (padrão: todas). Confira que o token do Figma existe sem lê-lo: `test -f ~/.config/figma/.env || test -n "$FIGMA_TOKEN"`; senão, oriente o usuário e pare. Confira também que o repositório foi preparado (`scripts/build.mjs`, dependências): senão, rode a skill `setup` antes.
+0. **Brief:** pergunte e grave em `reports/brief.md`, sem inventar: URL do Figma (`/design/`; arquivo `/site/` não é lido pela API), variantes no escopo (desktop; mobile; dark), idioma (`<html lang>`), texto **final** ou **placeholder** (nesse caso a página não vai a produção como está) e seções a gerar (padrão: todas). Confira que o token do Figma existe sem lê-lo: `test -f ~/.config/figma/.env || test -n "$FIGMA_TOKEN"`; senão, oriente o usuário e pare. **Stack:** use `stack` do `ma-config`. `vanilla` segue o fluxo. `angular` ainda não tem skill de programação neste plugin: avise o usuário e pare. `null` (indefinida): pergunte qual será (HTML/CSS/JS puro ou Angular, e a versão) e peça para rodar a skill `setup`, que grava a escolha. Confira também que o repositório foi preparado (`package.json`, dependências, `src`): senão, rode a skill `setup` antes. O build é do repositório: se `scripts.build` for `false`, avise que o projeto não gera versão de produção e que a etapa 4 será pulada (o `setup` oferece um ponto de partida).
 1. **designer** (`multi-agent:designer`): extrai o arquivo para `figma-data/<fileKey>/`, incluindo variantes, assets e a seção "Contraste". Esta etapa só termina com `check` limpo **e** as medidas de **todas** as variantes do brief (sem elas o `programmer` inventaria valores e o QA consertaria tudo depois). **Portão:** se houver pares de contraste reprovados, leve a lista ao usuário antes do `programmer` (a cor é do design; a decisão é dele) e repasse as trocas aprovadas.
-2. **programmer** (`multi-agent:programmer`): gera `src/app/`. Passe só o `fileKey`, as seções e o conteúdo do brief; ele lê o resto. Avise o usuário antes quando houver mais de 3 seções (é a etapa mais cara).
+2. **programmer** (`multi-agent:programmer`): gera `<src>/`. Passe só o `fileKey`, as seções e o conteúdo do brief; ele lê o resto. Avise o usuário antes quando houver mais de 3 seções (é a etapa mais cara).
 3. **qa-visual:** siga a skill `qa-visual` (laço de até 3 rodadas, com portão do usuário).
-4. **minifier** (`multi-agent:minifier`): `npm run build` gera `dist/app/` (SCSS compilado, tudo minificado e com mídia otimizada) e confere que renderiza igual ao `src/app/`. Falha de build volta ao `programmer` (e depois ao QA das seções tocadas); no máximo 2 ciclos, depois pare e reporte.
+4. **build-check** (`multi-agent:build-check`): roda o `npm run build` **do repositório** (o mesmo do deploy; o plugin não minifica nem otimiza nada) e confere que `<out>/` renderiza igual a `<src>/`. Sem `scripts.build`, a etapa é pulada e registrada em `reports/build-log.md`. Falha de build volta ao `programmer` (e depois ao QA das seções tocadas); no máximo 2 ciclos, depois pare e reporte.
 5. **Pronto:** relate.
 
 ## Regras
@@ -47,4 +49,4 @@ Execute **só** a etapa indicada e volte à tabela. Nunca pule etapa, nunca rode
 
 ## Relatório final
 
-Etapas concluídas, seções geradas, resultado do QA (rodadas, itens corrigidos, pendentes), tamanho de `src/app` → `dist/app` e o que ainda depende do usuário (textos finais, licenças, workflow de deploy rodando `npm ci && npm run build` e publicando `dist/app`, domínio e DNS).
+Etapas concluídas, seções geradas, resultado do QA (rodadas, itens corrigidos, pendentes), tamanho de `<src>` → `<out>` (ou "build não configurado") e o que ainda depende do usuário (textos finais, licenças, workflow de deploy rodando `npm ci && npm run build` e publicando `<out>`, domínio e DNS).
