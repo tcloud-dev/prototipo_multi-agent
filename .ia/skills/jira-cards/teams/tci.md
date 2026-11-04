@@ -11,7 +11,7 @@ Aplique estes valores quando o campo for obrigatório (ou presente no card model
 | Produto (lista) | `customfield_11391` | T-Cloud |
 | Cliente | `customfield_12848` | Interno |
 | Times Envolvidos (lista) | `customfield_11242` | T-Cloud Design |
-| Team | `customfield_10114` | T-Cloud Interface (id `d609020d-904d-46c5-95e3-3cbc5be185bc`). Padrão **inicial**: o time pode ser trocado depois da criação, então outro Team já preenchido não é desvio. Escrita testada em 2026-10-17: passe o **id como texto simples**, `"d609020d-904d-46c5-95e3-3cbc5be185bc"` (não `{"id": ...}`), em `additional_fields` do `createJiraIssue` (Épico e Histórias TCI-299 a 301, releitura confirmou) e em `fields` do `editJiraIssue` (TCI-290 a 292). **Subtarefa herda o Team do pai:** não envie nem edite (o Jira recusa com "herda a atribuição da equipe do respectivo pai"; TCI-302) |
+| Team | `customfield_10114` | T-Cloud Interface (id `d609020d-904d-46c5-95e3-3cbc5be185bc`). Padrão **inicial**: o time pode ser trocado depois da criação, então outro Team já preenchido não é desvio. Escrita testada em 2026-10-17: passe o **id como texto simples**, `"d609020d-904d-46c5-95e3-3cbc5be185bc"` (não `{"id": ...}`), em `additional_fields` do `createJiraIssue` (Épico e Histórias TCI-299 a 301, releitura confirmou) e em `fields` do `editJiraIssue` (TCI-290 a 292). **Subtarefa herda o Team do pai:** não envie nem edite (o Jira recusa com "herda a atribuição da equipe do respectivo pai"; TCI-302, TCI-487). Se o usuário pedir para trocar o Team das subtarefas, a única via é trocar o Team do **pai**: as subtarefas já criadas acompanham (confirmado em 2026-10-29, TCI-483 -> TCI-487 a 496; ao criar, elas tinham herdado o Team antigo do pai). Confira com JQL `parent = <PAI> AND Team = "<id>"` |
 | Componente | `components` | T-Cloud |
 | Prioridade | `priority` | Média |
 
@@ -50,7 +50,7 @@ Só 5 campos **obrigatórios**: Resumo, Relator, Projeto, Tipo de item e **Pai**
 
 **Descrição:** a Subtarefa **aceita** descrição (testado em 2026-10-16, TCI-275, via `editJiraIssue`). Ao criar, use o modelo `## O que fazer` de `templates.md`, preenchido com o contexto que o usuário informar (pergunte qual é); sem conteúdo, `A definir`. Num lote, aplique a todas as subtarefas.
 
-**Datas e responsável:** a Subtarefa **aceita** Data de início (`customfield_10630`), Data limite (`duedate`) e Responsável (`assignee`) (testado em 2026-10-16, TCI-289, via `editJiraIssue`; o TCI-223, de outra pessoa, também as tem). São **opcionais e não são perguntados**: use só o que o usuário informar no pedido (ex.: `Crie uma subtarefa na história TCI-258: "Ajustar layout". Início 2026-10-19, limite 2026-10-23, responsável eu.`). Sem essa informação, crie sem esses campos. Valide `AAAA-MM-DD` e que a data limite não seja anterior à de início. Efeito do Jira: com data limite, Classes de Serviço passa de `Standard` para `Fixed Date`.
+**Datas e responsável:** a Subtarefa **aceita** Data de início (`customfield_10630`), Data limite (`duedate`) e Responsável (`assignee`) (testado em 2026-10-16, TCI-289, via `editJiraIssue`; o TCI-223, de outra pessoa, também as tem). Também funcionam **direto no `createJiraIssue`**: `assignee` (accountId) e `additional_fields` `{"customfield_10630": "AAAA-MM-DD", "duedate": "AAAA-MM-DD"}`, com a descrição em markdown (testado em 2026-10-29, TCI-487 a 496). Num lote, o usuário pode pedir datas "distribuídas" num período: espalhe pelos dias úteis proporcionalmente às estimativas e mostre a tabela de datas no plano. São **opcionais e não são perguntados**: use só o que o usuário informar no pedido (ex.: `Crie uma subtarefa na história TCI-258: "Ajustar layout". Início 2026-10-19, limite 2026-10-23, responsável eu.`). Sem essa informação, crie sem esses campos. Valide `AAAA-MM-DD` e que a data limite não seja anterior à de início. Efeito do Jira: com data limite, Classes de Serviço passa de `Standard` para `Fixed Date`.
 
 ## Hierarquia (testado em 2026-10-16)
 
@@ -71,7 +71,7 @@ Responsável, labels, datas, a história de referência de uma tarefa e a Área 
 
 ## Convenções de título
 
-Prefixo entre colchetes com a área, em maiúsculas: `[FRONT]`, `[IAM]`, `[APP][ROADMAP]`. Sugira o prefixo conforme o assunto, sem impor. Cards de teste usam `[TESTE]`.
+Prefixo entre colchetes com a área, em maiúsculas: `[FRONT]`, `[IAM]`, `[APP][ROADMAP]`. Sugira o prefixo conforme o assunto, sem impor. Cards de teste usam `[TESTE]`. **Subtarefas** de uma história seguem a numeração `N - título` (ex.: `0 - Avaliação de tempo de desenvolvimento`, `1 - Mapear ...`), sem prefixo de área. Numere a partir de 1 quando já existir a `0 - Avaliação...`.
 
 ## Tipos de issue do projeto
 
