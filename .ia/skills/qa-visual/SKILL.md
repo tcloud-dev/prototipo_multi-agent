@@ -12,11 +12,11 @@ Variante padrão: `desktop-light` (economia de tokens). `dark`, `mobile` e `tabl
 
 ## Pré-condições
 
-1. `src/app/index.html` existe e as seções têm `data-figma-node` (e `data-figma-<variante>` para a variante pedida). Senão, volte ao `/build-landing`.
+1. `<src>/index.html` existe (`<src>` vem de `node ${CLAUDE_PLUGIN_ROOT}/scripts/config/ma-config.mjs`; padrão `src/app`; a captura estática vale para `stack: vanilla`) e as seções têm `data-figma-node` (e `data-figma-<variante>` para a variante pedida). Senão, volte ao `/build-landing`.
 2. `figma-data/<fileKey>/` tem as medidas da variante. Faltando, acione o `designer` para extraí-las. Sem referência, não prossiga.
 3. Token do Figma disponível sem lê-lo: `test -f ~/.config/figma/.env || test -n "$FIGMA_TOKEN"`.
 4. `playwright` e `sharp` instalados no repositório (skill `setup`) e um Chrome/Edge (ou `npx playwright install chromium`).
-5. CSS compilado atualizado: `npm run sass` (o QA lê o `css/` gerado, não o SCSS). Depois de cada rodada de ajustes do `programmer`, compile de novo antes da reanálise.
+5. CSS compilado atualizado: `npm run sass` (se o projeto define esse script) (o QA lê o `css/` gerado, não o SCSS). Depois de cada rodada de ajustes do `programmer`, compile de novo antes da reanálise.
 
 ## Laço (no máximo 3 rodadas; depois pare e reporte o que resta, e só continue com pedido explícito do dono; ajuste aprovado que cause efeito colateral visível volta como item novo)
 

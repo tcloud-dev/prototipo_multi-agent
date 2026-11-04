@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Prepara um repositorio que instalou o plugin multi-agent - configura atribuicao de commits e PRs no .claude/settings.json, a regra do .gitignore do figma-data, o build da landing page (scripts/build.mjs e suas dependencias) e confere os requisitos (Node, FIGMA_TOKEN, jq). Use quando o usuario pedir para configurar, preparar ou fazer o setup do plugin no repositorio atual.
+description: Prepara um repositorio que instalou o plugin multi-agent - configura atribuicao de commits e PRs no .claude/settings.json, a regra do .gitignore do figma-data, a stack da landing page (chave multiAgent do package.json, com sugestao opcional de scripts e bibliotecas de build) e confere os requisitos (Node, FIGMA_TOKEN, jq). Use quando o usuario pedir para configurar, preparar ou fazer o setup do plugin no repositorio atual.
 ---
 
 # setup
@@ -15,7 +15,7 @@ Idioma da conversa: portugues (BR). Roda uma vez por repositorio consumidor. Sem
    - `node --version` (precisa ser recente; ver `${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs`).
    - `FIGMA_TOKEN`: so diga se existe como variavel de ambiente ou se o arquivo `~/.config/figma/.env` existe. **Nunca leia nem exiba o valor.**
    - `jq` (`command -v jq`): so necessario fora do Windows.
-   - Landing page: existem `package.json`, `scripts/build.mjs` e as devDependencies `esbuild`, `html-minifier-terser`, `sharp`, `svgo`, `ffmpeg-static`, `sass` e `playwright` (`npm ls <pacote> --depth=0`)? Existe um Chrome ou Edge (o QA usa `playwright`)?
+   - Landing page: rode `node ${CLAUDE_PLUGIN_ROOT}/scripts/config/ma-config.mjs` (le a chave `multiAgent` do `package.json`, ou `multi-agent.config.json`, e detecta a stack por `angular.json`, `@angular/core` ou `src/app/index.html`). Anote: `stack` e de onde veio (`stackSource`), `src`, `out` e se o projeto ja define os scripts `build` e `sass`. Para o QA visual: `playwright` e `sharp` instalados (`npm ls <pacote> --depth=0`) e um Chrome ou Edge.
 
 ## 2. Plano (um unico "sim")
 
@@ -23,9 +23,10 @@ Mostre o que sera feito e o que ja esta correto:
 
 - `.claude/settings.json`: garantir `"attribution": { "commit": "", "pr": "" }` (commits e PRs sem Co-Authored-By nem assinatura do Claude). Mescle com o conteudo existente; se `attribution` ja existir com outro valor, mostre a diferenca e pergunte, nao troque sozinho.
 - `.gitignore`: garantir a linha `figma-data/*/raw/` (JSON bruto do Figma fica fora do git).
-- `.gitignore`: garantir tambem `dist/` (artefato do build; o deploy o gera), `src/app/css/` (CSS compilado do Sass, sempre gerado) e `reports/qa/` (capturas do QA).
-- Build da landing page (so se o usuario for usar o agente `programmer`/`minifier`): copiar `${CLAUDE_PLUGIN_ROOT}/templates/build/build.mjs` para `scripts/build.mjs` do repositorio (**nao sobrescrever** um existente: mostre o diff e pergunte), garantir os scripts `"build": "node scripts/build.mjs"`, `"sass": "sass src/app/scss/main.scss src/app/css/main.css --no-source-map --quiet-deps"` e `"sass:watch": "npm run sass -- --watch"` no `package.json` (criar com `npm init -y` se nao houver) e instalar `npm i -D esbuild html-minifier-terser sharp svgo ffmpeg-static sass playwright`. O script fica no repositorio de proposito: o workflow de deploy no GitHub Actions roda o mesmo `npm ci && npm run build` e publica `dist/app/`. Atras do proxy da TOTVS, o `npm i` pede `NODE_USE_SYSTEM_CA=1`; com npm 12 os scripts de instalacao vem bloqueados: se o build reclamar de `esbuild` ou `ffmpeg-static`, rode `npm approve-scripts esbuild ffmpeg-static`. ja sao bloqueados pelo hook do plugin; nao copie o `deny` para o repositorio.
-- Requisitos que faltam (Node, token, jq, navegador): apenas liste e diga como resolver. Instale so as dependencias do build, e so depois do "sim".
+- `.gitignore`: garantir tambem `<out>/` (artefato do build; o deploy o gera; padrao `dist/`), `<src>/css/` (so se o projeto compila SCSS: o CSS gerado fica fora do git; padrao `src/app/css/`) e `reports/qa/` (capturas do QA).
+- Stack da landing page (so se o usuario for usar o agente `programmer`): `stack` indefinida -> pergunte qual sera, `vanilla` (HTML, SCSS e JS puros) ou `angular` (e qual versao; **ainda sem suporte no plugin**, so e registrada). Mostre o perfil `${CLAUDE_PLUGIN_ROOT}/stacks/<stack>.md` e grave a escolha na chave `multiAgent` do `package.json` (ou em `multi-agent.config.json` se nao houver `package.json` e o usuario nao quiser cria-lo), **sem tocar no resto do arquivo**; se a chave ja existir com outro valor, mostre a diferenca e pergunte.
+- Build da landing page: **o build e do repositorio, nao do plugin**. O contrato e o script `build` do `package.json` (e `sass`, se o projeto usa SCSS). Se o projeto **ja tem** `build`, nao mexa. Se **nao tem**, ofereca o ponto de partida do perfil (`stack: vanilla`): liste os scripts e as bibliotecas sugeridas, pergunte se quer aplicar tudo, so os scripts, ou nada; so o que for aceito e copiado (`${CLAUDE_PLUGIN_ROOT}/templates/build/build.mjs` -> `scripts/build.mjs`, sem sobrescrever; scripts e `npm i -D` das bibliotecas aceitas, `npm init -y` se faltar o `package.json`). Para `angular`, nao monte `package.json`: sugira o comando do Angular CLI da versao escolhida. Para o deploy, cite o exemplo `${CLAUDE_PLUGIN_ROOT}/templates/github-actions/deploy-example.yml` (nao instale). Dicas de ambiente (proxy da TOTVS, `npm approve-scripts`) estao no perfil. O `deny` de comandos git ja e bloqueado pelo hook do plugin; nao o copie para o repositorio.
+- Requisitos que faltam (Node, token, jq, navegador): apenas liste e diga como resolver. Instale so as dependencias que o usuario aceitou, e so depois do "sim".
 
 ## 3. Aplicar
 
