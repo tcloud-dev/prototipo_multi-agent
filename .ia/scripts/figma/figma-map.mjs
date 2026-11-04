@@ -116,6 +116,7 @@ function reportRateLimit(e) {
   const at = new Date(Date.now() + e.retryAfterSec * 1000).toLocaleString('pt-BR');
   console.error(`LIMITE DA API DO FIGMA (429). Tente de novo em ~${formatWait(e.retryAfterSec)} (a partir de ${at}).`);
   if (e.info?.planTier || e.info?.limitType) console.error(`Plano: ${e.info.planTier ?? '?'}; tipo de limite: ${e.info.limitType ?? '?'}.`);
+  if (e.retryAfterSec > 3600) console.error('Espera longa: costuma ser conta SEM assento Dev/Full (cota pequena). Opcoes: usar o token de uma conta com Dev/Full (o figma-data/ extraido por ela vale para todos) ou esperar.');
   console.error('O que ja foi baixado continua em cache (figma-data/<fileKey>/raw/cache/); `status` mostra o estado. PARE e reporte: nao insista, nao rode em segundo plano e nao crie laco de repeticao.');
 }
 

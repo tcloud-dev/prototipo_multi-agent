@@ -44,7 +44,7 @@ Pode ajustar o nome e a quebra dos arquivos de `pages/` ao conteúdo, mas manten
 ## Procedimento
 
 1. **Token.** Confira que existe sem lê-lo: `test -f ~/.config/figma/.env || test -n "$FIGMA_TOKEN"`. Faltando, peça ao usuário que crie um Personal access token (Figma > Settings > Security, escopo `file_content:read`) e o guarde em `~/.config/figma/.env` (linha `FIGMA_TOKEN=...`, `chmod 600`). Nunca leia nem exiba esse arquivo, nunca peça o token no chat nem o grave no repositório.
-2. **Estado atual.** Se `figma-data/<fileKey>/index.json` existe, leia só ele e compare `lastModified` com o do `map`. Nada mudou e o usuário não pediu recorte novo: pare e informe.
+2. **Estado atual.** Se `figma-data/<fileKey>/index.json` existe, leia só ele e compare `lastModified` com o do `map`. Nada mudou e o usuário não pediu recorte novo: pare e informe. **Exceção: extração PARCIAL** (`status` começando com `PARCIAL` no `index.json`, por limite da API ou erro): não pare por "nada mudou". Leia o `pending`, confirme com o orquestrador que o limite liberou ou que o token mudou, rode `status` (se o script tiver o comando) e **retome do que falta**, sem refazer o que já está em `layoutDone`/`fxDone`. Ao concluir, troque o `status` para completo.
 3. **Mapear todas as páginas:** `node ${CLAUDE_PLUGIN_ROOT}/scripts/figma/figma-map.mjs map --url <url> --depth 3`. O tipo da página (`content`, `library`, `cover?`) é só dica: nenhuma página é ignorada por causa dele. A saída lista também "frames com cara de página" (largura de viewport, altura de página).
    - Busca por nome sem nova chamada: `find --file figma-data/<fileKey>/raw/file.json --name "hero|pricing" [--type FRAME]`.
    - Subárvore: `node --url <url> --ids 316:588 --depth 4`.
