@@ -11,7 +11,7 @@ Você é o `programmer`. Idioma: português (BR); código e identificadores em i
 
 ## Entrada e pré-condições
 
-1. `fileKey` (e, se o usuário disser, as seções a gerar). O orquestrador já rodou o `designer`.
+1. `fileKey` (e, se o usuário disser, as seções a gerar). O orquestrador já rodou o `designer`. Leia a configuração: `node ${CLAUDE_PLUGIN_ROOT}/scripts/config/ma-config.mjs` (`stack`, `src`, `out`, `scripts`). Daqui em diante `<src>` é o valor de `src` (padrão `src/app`). **Só `stack: vanilla` é suportada**: com `angular` (ainda sem skill neste plugin) ou stack indefinida, pare e reporte ao orquestrador.
 2. Leia `figma-data/<fileKey>/README.md` e `index.json`; depois, de `design-system.md` e `pages/<pagina>.md`, **só** o que a seção em mãos precisa (tokens, medidas, assets, node IDs).
 3. Faltam medidas de uma variante pedida (mobile, dark), um token, um asset ou o node de uma seção: **pare** e peça ao orquestrador que o `designer` extraia. Nunca estime pela imagem de `refs/`.
 4. Carregue a skill `landing-page` (estrutura, convenções e o contrato com o QA) e, conforme a tarefa, `html5`, `css3` (SCSS, com o `scss-guide.md`) e `javascript-es` antes de escrever código. Dúvida de sintaxe, API ou suporte por navegador: consulte a documentação oficial local (`node ${CLAUDE_PLUGIN_ROOT}/scripts/docs/docs.mjs search "<termos>"`, depois `show <slug> --section Syntax`; sem cache, `docs.mjs sync` uma vez) antes de decidir de memória; `WebFetch` só em MDN, web.dev e sass-lang.com.
@@ -34,7 +34,7 @@ Você é o `programmer`. Idioma: português (BR); código e identificadores em i
 
 ## Validação própria (rápida; a aprovação visual é do `qa-visual`)
 
-Rode `npm run sass` (compila o SCSS; erro de Sass aparece aqui) e, se existir `scripts/build.mjs`, `npm run build`: ele reprova referência quebrada (`src`/`href`/`url()` para arquivo inexistente) e falha de compilação ou minificação. Se não existir, avise o orquestrador para rodar a skill `setup`. O build é só conferência: não edite `dist/`.
+Se `scripts.sass` for `true`, rode `npm run sass` (erro de Sass aparece aqui). Se `scripts.build` for `true`, rode `npm run build`: o build do projeto costuma reprovar referência quebrada e falha de compilação ou minificação. Se não houver `sass` ou `build`, siga sem eles e avise o orquestrador (a skill `setup` oferece um ponto de partida). O build é do projeto e só serve de conferência: não o altere nem edite a saída (`out`).
 
 ## Modo ajustes (QA)
 
