@@ -13,18 +13,26 @@
 //   node figma-map.mjs fx --url <url|fileKey> --ids 846:1072,1044:500 [--depth 4] [--json]
 //                                                                            rotacao, blend, opacidade, filtros (saturacao), efeitos (blur, sombra) e trechos de texto com cor/peso/tamanho proprios
 //   node figma-map.mjs check --url <url|fileKey> --ids 316:588,316:194       confere se cada no existe no arquivo Figma (codigo 1 se faltar)
+//   node figma-map.mjs prefetch --url <url|fileKey> (--ids a,b,c | --sections [--variants desktop-light,mobile-light]) [--depth 4] [--batch 20] [--max-requests N] [--dry-run]
+//                                                                            baixa nos em LOTE para o cache (raw/cache/); layout, fx e node passam a ler dele sem chamar a API. --sections usa raw/variants.json
+//   node figma-map.mjs status --url <url|fileKey>                            offline: bloqueio do Figma (429), requisicoes das ultimas 24h e o que ja esta em cache
 //   (map/node aceitam --from-file <json> para trabalhar offline com uma resposta ja salva)
+// Limite de requisicoes (assento de visualizacao tem cota baixa): tudo que e baixado fica em figma-data/<fileKey>/raw/cache/ e nada e pedido duas vezes
+// (--refresh forca novo download); nos vao em lote; 429 curto espera, 429 longo PARA com codigo 3 e grava o bloqueio (chamadas seguintes falham na hora).
+// Variaveis: FIGMA_MIN_INTERVAL_MS (padrao 1000, intervalo entre requisicoes) e FIGMA_MAX_WAIT_SEC (padrao 30, maior espera aceita num 429).
+// Codigos de saida: 0 ok, 1 falha, 2 uso/token, 3 limite de requisicoes do Figma.
 // Saida padrao: figma-data/<fileKey>/ na raiz do repositorio (raw/ = JSON bruto, refs/ = PNGs, assets/ = arquivos exportados).
 // Token: variavel de ambiente FIGMA_TOKEN ou, se ela nao existir, o arquivo
 // ~/.config/figma/.env (fora do repositorio, chmod 600), com a linha FIGMA_TOKEN=...
 // (Figma > Settings > Security > Personal access tokens, escopo file_content:read).
 // Nunca grave o token em arquivo do repositorio.
 import { execFileSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
+import { ApiError, RateLimitError, createClient, formatWait, NODES_PER_REQUEST } from './lib/figma-api.mjs';
 import { collectFx } from './lib/fx.mjs';
 import { extOf, resolveOriginal } from './lib/originals.mjs';
 import tls from 'node:tls';
@@ -53,7 +61,9 @@ const opt = (name, fallback) => {
   return i >= 0 ? rest[i + 1] : fallback;
 };
 
-const API = 'https://api.figma.com/v1';
+// FIGMA_API_URL existe so para teste e so aceita endereco local (o token nunca vai para outro host).
+const LOCAL_API = /^http:\/\/(127\.0\.0\.1|localhost):\d+\//;
+const API = LOCAL_API.test(process.env.FIGMA_API_URL ?? '') ? process.env.FIGMA_API_URL.replace(/\/$/, '') : 'https://api.figma.com/v1';
 const COVER = /\b(cover|capa|thumbnail|index|intro|welcome)\b/i;
 const LIBRARY = /(component|style|icon|design system|library|tokens|biblioteca|componente)/i;
 
@@ -72,28 +82,42 @@ function loadTokenFile() {
   process.loadEnvFile(file);
 }
 
-async function api(path) {
+const REFRESH = rest.includes('--refresh');
+
+function getToken() {
   loadTokenFile();
   const token = process.env.FIGMA_TOKEN;
   if (!token) {
     console.error('FIGMA_TOKEN nao definido. Crie um Personal access token (Figma > Settings > Security, escopo file_content:read) e guarde em ~/.config/figma/.env (linha FIGMA_TOKEN=..., chmod 600) ou rode `export FIGMA_TOKEN=...` no terminal antes de abrir o Claude Code. Nao salve o token em arquivos do repositorio.');
     process.exit(2);
   }
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${API}${path}`, { headers: { 'X-Figma-Token': token } });
-    if (res.status === 429) {
-      await new Promise((r) => setTimeout(r, (Number(res.headers.get('retry-after')) || 5) * 1000));
-      continue;
-    }
-    if (!res.ok) {
-      const hint = { 403: 'token invalido/sem acesso ao arquivo', 404: 'arquivo ou node nao encontrado' }[res.status] ?? '';
-      console.error(`Figma API ${res.status} ${hint}: ${(await res.text()).slice(0, 200)}`);
-      process.exit(1);
-    }
-    return res.json();
+  return token;
+}
+
+// Um cliente por execucao (um arquivo Figma por vez). Cache, ritmo e bloqueio por 429 ficam em figma-data/<key>/raw/.
+let client = null;
+const clientFor = (key) =>
+  (client ??= createClient({
+    baseUrl: API,
+    getToken,
+    stateDir: dataDir(key, 'raw'),
+    minIntervalMs: Number(process.env.FIGMA_MIN_INTERVAL_MS ?? 1000),
+    maxWaitSec: Number(process.env.FIGMA_MAX_WAIT_SEC ?? 30),
+    log: (m) => console.error(m),
+  }));
+
+function reportUsage() {
+  if (client && (client.stats.requests || client.stats.cacheHits)) {
+    console.error(`[figma] ${client.stats.requests} requisicao(oes) a API, ${client.stats.cacheHits} item(ns) vindo(s) do cache`);
   }
-  console.error('Figma API: limite de requisicoes (429) persistente; tente de novo em alguns minutos.');
-  process.exit(1);
+}
+
+function reportRateLimit(e) {
+  const at = new Date(Date.now() + e.retryAfterSec * 1000).toLocaleString('pt-BR');
+  console.error(`LIMITE DA API DO FIGMA (429). Tente de novo em ~${formatWait(e.retryAfterSec)} (a partir de ${at}).`);
+  if (e.info?.planTier || e.info?.limitType) console.error(`Plano: ${e.info.planTier ?? '?'}; tipo de limite: ${e.info.limitType ?? '?'}.`);
+  if (e.retryAfterSec > 3600) console.error('Espera longa: costuma ser conta SEM assento Dev/Full (cota pequena). Opcoes: usar o token de uma conta com Dev/Full (o figma-data/ extraido por ela vale para todos) ou esperar.');
+  console.error('O que ja foi baixado continua em cache (figma-data/<fileKey>/raw/cache/); `status` mostra o estado. PARE e reporte: nao insista, nao rode em segundo plano e nao crie laco de repeticao.');
 }
 
 const size = (n) => (n.absoluteBoundingBox ? `${Math.round(n.absoluteBoundingBox.width)}x${Math.round(n.absoluteBoundingBox.height)}` : '');
@@ -154,7 +178,7 @@ async function load(label) {
 async function cmdMap() {
   const depth = Number(opt('depth', 3));
   const src = await load('map');
-  const file = src.fetch ? await api(`/files/${src.key}?depth=${depth}`) : src;
+  const file = src.fetch ? await clientFor(src.key).getFile(src.key, depth, { exact: true, refresh: REFRESH }) : src;
   const key = src.key ?? fileKeyOf(opt('url')) ?? 'offline';
   const out = resolve(opt('out', dataDir(key, 'raw')));
   await mkdir(out, { recursive: true });
@@ -206,7 +230,7 @@ async function cmdNode() {
     console.error('node: informe --ids 316:588,316:194');
     process.exit(2);
   }
-  const data = src.fetch ? await api(`/files/${src.key}/nodes?ids=${encodeURIComponent(ids.join(','))}&depth=${depth}`) : { nodes: Object.fromEntries(ids.map((id) => [id, { document: [...walk(src.document ?? src)].find((w) => w.node.id === id)?.node }])) };
+  const data = src.fetch ? await clientFor(src.key).getNodes(src.key, ids, depth, { refresh: REFRESH }) : { nodes: Object.fromEntries(ids.map((id) => [id, { document: [...walk(src.document ?? src)].find((w) => w.node.id === id)?.node }])) };
   const out = resolve(opt('out', dataDir(src.key ?? 'offline', 'raw')));
   await mkdir(out, { recursive: true });
   for (const id of ids) {
@@ -222,20 +246,7 @@ async function cmdNode() {
 }
 
 // ---------- geometria e auto-layout (fonte da verdade escrita para comparar com o DOM) ----------
-async function cmdLayout() {
-  const id = normalizeId(opt('ids', ''));
-  const depth = Number(opt('depth', 4));
-  const src = await load('layout');
-  if (!id) {
-    console.error('layout: informe --ids <node> (uma secao)');
-    process.exit(2);
-  }
-  const data = src.fetch ? await api(`/files/${src.key}/nodes?ids=${encodeURIComponent(id)}&depth=${depth}`) : { nodes: { [id]: { document: [...walk(src.document ?? src)].find((w) => w.node.id === id)?.node } } };
-  const root = data.nodes?.[id]?.document;
-  if (!root) {
-    console.error(`layout: no ${id} nao encontrado`);
-    process.exit(1);
-  }
+function printLayout(root, depth) {
   const ox = root.absoluteBoundingBox.x;
   const oy = root.absoluteBoundingBox.y;
   console.log(`${root.name} [${root.id}] ${Math.round(root.absoluteBoundingBox.width)}x${Math.round(root.absoluteBoundingBox.height)}  (x,y relativos ao no)`);
@@ -258,6 +269,30 @@ async function cmdLayout() {
   console.log(lines.join('\n'));
 }
 
+// Aceita varios nos em --ids: vao numa unica requisicao (e ficam em cache para o fx e o node).
+async function cmdLayout() {
+  const ids = opt('ids', '').split(',').map((s) => s.trim()).filter(Boolean).map(normalizeId);
+  const depth = Number(opt('depth', 4));
+  const src = await load('layout');
+  if (!ids.length) {
+    console.error('layout: informe --ids <node>[,<node>...] (secoes)');
+    process.exit(2);
+  }
+  const data = src.fetch ? await clientFor(src.key).getNodes(src.key, ids, depth, { refresh: REFRESH }) : { nodes: Object.fromEntries(ids.map((id) => [id, { document: [...walk(src.document ?? src)].find((w) => w.node.id === id)?.node }])) };
+  let missing = 0;
+  ids.forEach((id, i) => {
+    const root = data.nodes?.[id]?.document;
+    if (!root) {
+      console.error(`layout: no ${id} nao encontrado`);
+      missing++;
+      return;
+    }
+    if (ids.length > 1 && i > 0) console.log('');
+    printLayout(root, depth);
+  });
+  if (missing) process.exit(1);
+}
+
 // ---------- variantes do design ----------
 // Um arquivo de design costuma ter a mesma pagina em varias variantes (desktop/mobile x light/dark), lado a lado
 // na pagina de conteudo. Infere o dispositivo e o tema pelo nome do frame (e pela largura) e lista as secoes de cada um.
@@ -272,14 +307,14 @@ function variantOf(frame) {
 
 async function cmdVariants() {
   const src = await load('variants');
-  const file = src.fetch ? await api(`/files/${src.key}?depth=3`) : src;
+  const file = src.fetch ? await clientFor(src.key).getFile(src.key, 3, { exact: true, refresh: REFRESH }) : src;
   const key = src.key ?? fileKeyOf(opt('url')) ?? 'offline';
   const out = resolve(opt('out', dataDir(key, 'raw')));
   await mkdir(out, { recursive: true });
   const frames = file.document.children.flatMap((p) => pageLikeFrames(p).map((f) => ({ page: p.name, frame: f })));
   const ids = frames.map((x) => x.frame.id);
-  // Um so pedido com profundidade 2 para ter os filhos diretos (as secoes) de todos os frames.
-  const detail = src.fetch && ids.length ? await api(`/files/${src.key}/nodes?ids=${encodeURIComponent(ids.join(','))}&depth=2`) : null;
+  // Pedido em lote com profundidade 2 para ter os filhos diretos (as secoes) de todos os frames.
+  const detail = src.fetch && ids.length ? await clientFor(src.key).getNodes(src.key, ids, 2, { refresh: REFRESH }) : null;
   const result = { fileKey: key, name: file.name, variants: {} };
   // Frames com dispositivo E tema escritos no nome tem prioridade na chave (um "Group" de capa nao pode tomar `desktop-light`).
   const explicit = (f) => Number(/mobile|iphone|android|phone|celular|tablet|ipad|desktop|laptop|web|notebook/i.test(f.name)) + Number(/dark|escuro|light|claro/i.test(f.name));
@@ -311,7 +346,7 @@ async function cmdFx() {
     process.exit(2);
   }
   const src = await load('fx');
-  const data = await api(`/files/${src.key}/nodes?ids=${encodeURIComponent(ids.join(','))}&depth=${depth}`);
+  const data = await clientFor(src.key).getNodes(src.key, ids, depth, { refresh: REFRESH });
   for (const id of ids) {
     const doc = data.nodes?.[id]?.document;
     if (!doc) {
@@ -326,7 +361,7 @@ async function cmdFx() {
 }
 
 // ---------- imagem de referencia (render do Figma) ----------
-// Renderiza em PNG cada no informado em --ids (ex.: telas, secoes, componentes). Nao apaga o que ja existe em refs/.
+// Renderiza em PNG cada no informado em --ids (ex.: telas, secoes, componentes), todos numa requisicao. Pula o PNG que ja existe em refs/ (--force renova).
 async function cmdImage() {
   const ids = opt('ids')?.split(',').map(normalizeId);
   const key = fileKeyOf(opt('url'));
@@ -337,9 +372,18 @@ async function cmdImage() {
   const out = resolve(opt('out', dataDir(key, 'refs')));
   await mkdir(out, { recursive: true });
   const scale = opt('scale', '1');
-  const data = await api(`/images/${key}?ids=${encodeURIComponent(ids.join(','))}&format=png&scale=${scale}`);
+  const force = rest.includes('--force');
+  const todo = ids.filter((id) => {
+    if (!force && existsSync(join(out, `${id.replace(':', '-')}.png`))) {
+      console.log(`PULOU  ${id} (ja existe; --force para renovar)`);
+      return false;
+    }
+    return true;
+  });
+  if (!todo.length) return;
+  const data = await clientFor(key).request(`/images/${key}?ids=${encodeURIComponent(todo.join(','))}&format=png&scale=${scale}`);
   let missing = 0;
-  for (const id of ids) {
+  for (const id of todo) {
     const url = data.images?.[id];
     if (!url) {
       missing++;
@@ -383,10 +427,10 @@ async function cmdAssets() {
   // mode "original": baixa o arquivo da imagem colocada no design (fill IMAGE), sem o que estiver por cima dela.
   const originals = pending.filter((a) => a.mode === 'original');
   if (originals.length) {
-    const imageUrls = (await api(`/files/${key}/images`)).meta?.images ?? {};
+    const imageUrls = (await clientFor(key).request(`/files/${key}/images`)).meta?.images ?? {};
     for (let i = 0; i < originals.length; i += 20) {
       const batch = originals.slice(i, i + 20);
-      const data = await api(`/files/${key}/nodes?ids=${encodeURIComponent(batch.map((a) => a.node).join(','))}&depth=6`);
+      const data = await clientFor(key).getNodes(key, batch.map((a) => a.node), 6, { refresh: REFRESH });
       for (const a of batch) {
         const doc = data.nodes?.[a.node]?.document;
         const picked = doc ? resolveOriginal(doc) : { error: 'no nao encontrado' };
@@ -413,7 +457,7 @@ async function cmdAssets() {
   }
   for (const call of planCalls(pending)) {
     const ids = call.assets.map((a) => a.node).join(',');
-    const data = await api(`/images/${key}?ids=${encodeURIComponent(ids)}&format=${call.format}&scale=${call.scale}`);
+    const data = await clientFor(key).request(`/images/${key}?ids=${encodeURIComponent(ids)}&format=${call.format}&scale=${call.scale}`);
     for (const a of call.assets) {
       const url = data.images?.[a.node];
       if (!url) {
@@ -446,9 +490,9 @@ async function cmdCheck() {
     console.error('check: informe --url <url|fileKey> --ids 316:588,316:194');
     process.exit(2);
   }
-  const meta = await api(`/files/${key}?depth=1`);
+  const meta = await clientFor(key).getFile(key, 1, { refresh: REFRESH });
   console.log(`Arquivo ${key}: "${meta.name}" (${meta.document.children.length} pagina(s)), ultima modificacao ${meta.lastModified}`);
-  const data = await api(`/files/${key}/nodes?ids=${encodeURIComponent(ids.join(','))}&depth=1`);
+  const data = await clientFor(key).getNodes(key, ids, 1, { refresh: REFRESH });
   let missing = 0;
   for (const id of ids) {
     const doc = data.nodes?.[id]?.document;
@@ -463,9 +507,79 @@ async function cmdCheck() {
   if (missing) process.exit(1);
 }
 
-const commands = { map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck };
+// ---------- prefetch: baixa nos em lote para o cache ----------
+// Com cota baixa (assento de visualizacao) o que importa e o NUMERO de requisicoes: aqui os nos vao juntos, em lotes, e o que ja
+// esta em cache nao e pedido de novo. --max-requests N trabalha em pedacos: faz no maximo N requisicoes e diz o que ficou; rodar de
+// novo continua de onde parou. --dry-run so mostra o plano (nenhuma requisicao).
+function sectionIdsFromVariants(key, only) {
+  const file = dataDir(key, 'raw', 'variants.json');
+  if (!existsSync(file)) {
+    console.error(`prefetch: ${file} nao existe; rode antes: node figma-map.mjs variants --url ${key}`);
+    process.exit(2);
+  }
+  const wanted = only?.split(',').map((s) => s.trim());
+  const variants = JSON.parse(readFileSync(file, 'utf8')).variants;
+  const ids = [];
+  for (const [name, v] of Object.entries(variants)) {
+    if (wanted && !wanted.includes(name)) continue;
+    for (const s of v.sections) if (!ids.includes(s.id)) ids.push(s.id);
+  }
+  return ids;
+}
+
+async function cmdPrefetch() {
+  const key = fileKeyOf(opt('url'));
+  let ids = opt('ids')?.split(',').map(normalizeId);
+  if (!key || (!ids?.length && !rest.includes('--sections'))) {
+    console.error('prefetch: informe --url <url|fileKey> e --ids a,b,c ou --sections [--variants desktop-light,mobile-light]; opcoes: --depth 4 --batch 20 --max-requests N --dry-run --refresh');
+    process.exit(2);
+  }
+  if (!ids?.length) ids = sectionIdsFromVariants(key, opt('variants'));
+  const depth = Number(opt('depth', 4));
+  const batchSize = Math.max(1, Number(opt('batch', NODES_PER_REQUEST)));
+  const maxRequests = opt('max-requests') ? Math.max(1, Number(opt('max-requests'))) : Infinity;
+  const c = clientFor(key);
+  const plan = await c.planNodes(ids, depth, { refresh: REFRESH, batchSize });
+  console.log(`${ids.length} no(s) a profundidade ${depth}: ${plan.cached.length} ja em cache, ${plan.missing.length} a baixar em ${plan.requests} requisicao(oes) de ate ${batchSize}.`);
+  if (rest.includes('--dry-run') || !plan.missing.length) return;
+  const out = await c.getNodes(key, ids, depth, { refresh: REFRESH, batchSize, maxRequests });
+  const notFound = plan.missing.filter((id) => !out.pending.includes(id) && !out.nodes[id]?.document);
+  notFound.forEach((id) => console.log(`FALTA  ${id} (nao encontrado no arquivo)`));
+  console.log(`Baixados: ${plan.missing.length - out.pending.length - notFound.length}.`);
+  if (out.pending.length) console.log(`PENDENTES (${out.pending.length}, limite --max-requests ${maxRequests}): rode o mesmo comando de novo para continuar: ${out.pending.join(',')}`);
+}
+
+// Offline: nao usa token nem rede.
+async function cmdStatus() {
+  const key = fileKeyOf(opt('url'));
+  if (!key) {
+    console.error('status: informe --url <url|fileKey>');
+    process.exit(2);
+  }
+  const s = await clientFor(key).status();
+  console.log(s.blockedUntil ? `BLOQUEADO pelo limite do Figma por mais ~${formatWait(s.retryAfterSec)} (ate ${new Date(s.blockedUntil).toLocaleString('pt-BR')}).${s.planTier || s.limitType ? ` Plano: ${s.planTier ?? '?'}; tipo: ${s.limitType ?? '?'}.` : ''}` : 'Sem bloqueio registrado.');
+  console.log(`Requisicoes a API: ${s.calls.lastHour} na ultima hora, ${s.calls.last24h} nas ultimas 24h, ${s.calls.total} no total (${s.calls.limited} com 429).`);
+  console.log(`Cache: ${s.cache.nodes} no(s)${s.cache.fileDepths.length ? `, arquivo em profundidade ${s.cache.fileDepths.join(', ')}` : ''}. Pasta: ${dataDir(key, 'raw', 'cache')}`);
+}
+
+const commands = { map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck, prefetch: cmdPrefetch, status: cmdStatus };
 if (!commands[command]) {
-  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check> [opcoes]  (ver cabecalho do arquivo)');
+  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check|prefetch|status> [opcoes]  (ver cabecalho do arquivo)');
   process.exit(2);
 }
-await commands[command]();
+try {
+  await commands[command]();
+  reportUsage();
+} catch (e) {
+  reportUsage();
+  if (e instanceof RateLimitError) {
+    reportRateLimit(e);
+    process.exit(3);
+  }
+  if (e instanceof ApiError) {
+    const hint = { 403: 'token invalido/sem acesso ao arquivo', 404: 'arquivo ou node nao encontrado' }[e.status] ?? '';
+    console.error(`Figma API ${e.status} ${hint}: ${e.body}`);
+    process.exit(1);
+  }
+  throw e;
+}
