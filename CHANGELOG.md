@@ -2,6 +2,19 @@
 
 Formato: uma seção por versão (`## X.Y.Z - AAAA-MM-DD`), com Adicionado, Alterado e Corrigido. Processo em `RELEASING.md`.
 
+## Não lançado
+
+### Adicionado
+
+- `figma-map.mjs spec`: medidas por seção em `figma-data/<fileKey>/spec/` (versionado), com coordenadas relativas, `clip`, absolutos, ocultos, textos, imagens (`scaleMode`/`imageTransform`), efeitos e "Lacunas".
+- `coverage` e `index` (offline): lacunas e estado (`status`, `layoutDone`, `fxDone`) calculados do disco, não escritos pelo agente.
+- `preflight` (plano e limite da conta), `--save` atômico em `layout`/`fx`, trava de uma chamada por vez (saída 4) e cache por subárvore (nó dentro de árvore já baixada não gera requisição).
+
+### Alterado
+
+- `fx` agrupa payloads idênticos; `variants` só considera frames de página e manda duplicatas para `alternatives` (fim das falsas variantes mobile).
+- `designer` roda `preflight`, usa `--save` e só declara completo com `coverage` e `check` limpos; `programmer` lê `spec/`, confere dado a dado, pergunta decisões em lote e não inventa breakpoints; `qa-visual` não dá percentual sem critério e compara `clip`/`scaleMode`; `build-landing` exige sinais calculados e abre o relatório com "Decisões que precisam de você".
+
 ## 0.3.1 - 2026-11-05
 
 ### Corrigido
