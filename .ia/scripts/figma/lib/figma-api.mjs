@@ -120,15 +120,43 @@ export function createClient({
   }
 
   // ---------- nos (layout, fx, node, check, variants, assets) ----------
+  // Um no que esta DENTRO de outra arvore em cache (a secao dentro da pagina baixada com --depth 7) tambem e servido de la, com a
+  // profundidade que sobra (profundidade da arvore - nivel do no). O indice e montado uma vez por execucao, so no primeiro erro de cache.
+  let subtreeIndex = null;
+  async function subtree(id) {
+    if (!cacheDir) return null;
+    if (!subtreeIndex) {
+      subtreeIndex = new Map();
+      const dir = join(cacheDir, 'nodes');
+      if (existsSync(dir)) {
+        for (const f of (await readdir(dir)).filter((x) => x.endsWith('.json'))) {
+          const hit = await readJsonSafe(join(dir, f));
+          if (!hit?.document) continue;
+          const visit = (node, level) => {
+            const remaining = hit.depth - level;
+            if (remaining < 0) return;
+            const prev = subtreeIndex.get(node.id);
+            if (!prev || prev.remaining < remaining) subtreeIndex.set(node.id, { document: node, remaining });
+            for (const c of node.children ?? []) visit(c, level + 1);
+          };
+          visit(hit.document, 0);
+        }
+      }
+    }
+    return subtreeIndex.get(id) ?? null;
+  }
   async function readCachedNode(id, depth) {
     if (!cacheDir) return null;
     const hit = await readJsonSafe(join(cacheDir, 'nodes', `${fileNameOf(id)}.json`));
-    return hit && hit.depth >= depth && hit.document ? hit.document : null;
+    if (hit && hit.depth >= depth && hit.document) return hit.document;
+    const inner = await subtree(id);
+    return inner && inner.remaining >= depth ? inner.document : null;
   }
   async function writeCachedNode(id, depth, document) {
     if (!cacheDir) return;
     await mkdir(join(cacheDir, 'nodes'), { recursive: true });
     await writeFile(join(cacheDir, 'nodes', `${fileNameOf(id)}.json`), JSON.stringify({ depth, fetchedAt: new Date(now()).toISOString(), document }));
+    subtreeIndex = null;
   }
 
   // Que nos ja estao em cache (com profundidade suficiente) e quais precisariam de requisicao.
@@ -229,5 +257,25 @@ export function createClient({
     };
   }
 
-  return { request, getNodes, planNodes, getFile, status, stats };
+  // Profundidade com que o no foi baixado (a que vale para saber o que ficou truncado), ou null se nao esta em cache.
+  async function cachedDepth(id) {
+    if (!cacheDir) return null;
+    const hit = await readJsonSafe(join(cacheDir, 'nodes', `${fileNameOf(id)}.json`));
+    if (hit?.document) return hit.depth;
+    return (await subtree(id))?.remaining ?? null;
+  }
+
+  // Todos os nos em cache, para a conferencia de cobertura (offline). O id e o da raiz de cada arquivo (com "-" no lugar de ":").
+  async function loadAllCachedNodes() {
+    const dir = cacheDir && join(cacheDir, 'nodes');
+    if (!dir || !existsSync(dir)) return [];
+    const entries = [];
+    for (const f of (await readdir(dir)).filter((x) => x.endsWith('.json'))) {
+      const hit = await readJsonSafe(join(dir, f));
+      if (hit?.document) entries.push({ id: hit.document.id, depth: hit.depth, document: hit.document });
+    }
+    return entries;
+  }
+
+  return { request, getNodes, planNodes, getFile, status, stats, cachedDepth, loadAllCachedNodes };
 }

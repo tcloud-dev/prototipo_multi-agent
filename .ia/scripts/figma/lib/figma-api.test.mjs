@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ApiError, createClient, formatWait, NODES_PER_REQUEST, RateLimitError } from './figma-api.mjs';
@@ -236,4 +236,20 @@ test('planNodes respeita batchSize', async () => {
   const plan = await t.client.planNodes(['1:1', '1:2', '1:3', '1:4', '1:5'], 3, { batchSize: 2 });
   assert.equal(plan.requests, 3);
   t.done();
+});
+
+test('no dentro de outra arvore em cache sai de la, com a profundidade que sobra; mais fundo que isso pede a API', async () => {
+  const { client, calls, dir, done } = setup([res(200, nodesBody('2:2'))]);
+  const parent = { id: '1:1', name: 'pagina', type: 'FRAME', children: [{ id: '2:2', name: 'secao', type: 'FRAME', children: [{ id: '3:3', name: 'card', type: 'FRAME', children: [{ id: '4:4', name: 'texto', type: 'TEXT' }] }] }] };
+  mkdirSync(join(dir, 'cache', 'nodes'), { recursive: true });
+  writeFileSync(join(dir, 'cache', 'nodes', '1-1.json'), JSON.stringify({ depth: 3, document: parent }));
+  // 2:2 esta no nivel 1 de uma arvore de profundidade 3: sobram 2 niveis.
+  const shallow = await client.getNodes('K', ['2:2'], 2);
+  assert.equal(calls.length, 0, 'servido pela arvore da pagina');
+  assert.equal(shallow.nodes['2:2'].document.children[0].id, '3:3');
+  assert.equal(await client.cachedDepth('2:2'), 2);
+  // Pedir 3 niveis a partir da secao excede o que o cache tem: vai a API.
+  await client.getNodes('K', ['2:2'], 3);
+  assert.equal(calls.length, 1);
+  done();
 });
