@@ -21,6 +21,8 @@ O limite do Figma conta **requisições**, não o tamanho da resposta, e uma con
 - **Planeje antes de baixar:** depois do `variants`, rode `prefetch --url <url> --sections --depth 4 --dry-run` (usa `raw/variants.json`; `--variants desktop-light,mobile-light` filtra) e diga ao orquestrador quantas requisições faltam (mais de 5: avise antes de seguir). Baixe com o mesmo comando sem `--dry-run`. Para trabalhar **em pedaços**, use `--max-requests N` (e `--batch N` menor): ele para depois de N requisições, lista o que ficou pendente e rodar de novo continua de onde parou.
 - **Código de saída 3 ou "LIMITE DA API DO FIGMA": pare.** Não tente de novo nem contorne. Rode `status --url <url>` (offline, sem token) e reporte: o que já está em `raw/` e em `raw/cache/`, o que falta e a espera informada. Quem decide entre esperar e seguir só com o que há é o orquestrador.
 - **Ao retomar** depois de um limite, comece por `status`: o cache evita refazer o que já veio, e `image` pula o PNG que já existe (`--force` renova).
+- **Seção dentro de uma árvore já baixada sai do cache.** Uma página baixada com `--depth 7` atende `layout`, `fx`, `node` e `spec` de qualquer seção dela sem requisição. Para cobrir um buraco de profundidade, baixe a **raiz** de novo com `--depth` maior (uma requisição), não cada nó.
+- **Grave com `--save <arquivo>`**, nunca com `> arquivo`: `layout` e `fx` só criam o arquivo quando terminam bem. Arquivo vazio em `raw/` nunca conta como feito.
 
 ## Entrada
 
@@ -33,7 +35,9 @@ index.json          páginas, nós mapeados, lastModified do Figma e data da ext
 README.md           resumo curto: o que existe e onde
 raw/                JSON bruto da API (file.json, node-<id>.json, variants.json); só consulta, fora do git
 design-system.md    tokens (cores por tema, tipografia, espaçamento, raios, sombras), efeitos, componentes, contraste, decisões, pendências, log
-pages/<pagina>.md   estrutura e medidas por página/frame (node IDs, coordenadas e specs)
+spec/<secao>-<id>.md  gerado por `spec`: o que o programmer lê (árvore, textos, imagens, clip, ocultos, efeitos, lacunas)
+coverage.json       gerado por `coverage`: lacunas de profundidade, arquivos vazios; o status do index.json sai daqui
+pages/<pagina>.md   decisões, divergências e notas por página/frame (o que o `spec` não extrai)
 assets.json         manifesto único de exportação
 assets/<categoria>/ arquivos exportados
 refs/               PNGs de referência
@@ -55,8 +59,9 @@ Pode ajustar o nome e a quebra dos arquivos de `pages/` ao conteúdo, mas manten
    - Cores, tipografia, raios e sombras vêm do JSON do nó (`jq` ou `node -e` em `raw/`). Página de estilos do arquivo vale mais que o valor lido num componente; se o rótulo do guia contradiz o swatch, use o valor do swatch e registre a divergência.
    - `variants --url <url>` (opcional): infere variantes desktop/mobile × light/dark pelo nome e largura do frame. Variante marcada `[inferido]` não é confiável: registre como sugestão.
    - `image --url <url> --ids <nós>`: PNG de referência em `refs/`; confira o que documentou contra a imagem.
-5. **Gravar** em `pages/` e `design-system.md` com o merge abaixo, e atualizar `index.json` e `README.md`. Depois releia só as seções gravadas para confirmar que nada se perdeu.
-6. **Conferir:** `check --url <url> --ids <nós documentados>`; cada ID precisa existir no Figma (código 1 se faltar). Só declare pronto com `check` limpo.
+5. **Especificar por seção:** `spec --url <url> --ids <seção>[,<seção>...] --depth 4` grava `figma-data/<fileKey>/spec/<seção>-<id>.md` (vai para o git). É **o arquivo que o programmer lê**: árvore com coordenadas relativas à seção, textos com tipografia e cor, imagens com `scaleMode`/`imageTransform`, `clip`, nós absolutos e ocultos, efeitos agrupados e as lacunas de profundidade. Não monte essas tabelas à mão; se o `spec` mostrar contêineres truncados em "Lacunas", baixe a raiz com `--depth` maior e gere o `spec` de novo.
+6. **Gravar** em `pages/` e `design-system.md` só o que o `spec` não tem (decisões, divergências, tokens com nome, notas), com o merge abaixo, e atualizar `index.json` e `README.md`. Depois releia só as seções gravadas para confirmar que nada se perdeu.
+7. **Cobertura e conferência:** `coverage --url <url> [--roots <seções>]` (offline) lista o que nenhuma árvore em cache cobre e os arquivos vazios; sai com código 1 se houver lacuna e grava `coverage.json`. Depois `check --url <url> --ids <nós documentados>`: cada ID precisa existir no Figma (código 1 se faltar). **Só declare a extração completa com `coverage` limpo e `check` limpo**; com lacuna aberta, o `status` do `index.json` é `PARCIAL` e a lacuna vai listada (o usuário pode aceitá-la, e então registre como decisão). Não escreva no `status` uma causa que você não confirmou.
 
 ## Assets
 
