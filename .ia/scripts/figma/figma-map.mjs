@@ -19,12 +19,14 @@
 //   node figma-map.mjs spec --url <url|fileKey> --ids <secao>[,<secao>...] [--depth 4] [--stdout]
 //                                                                            especificacao por secao em figma-data/<fileKey>/spec/ (vai para o git): arvore com coordenadas relativas a secao, textos com tipografia, imagens (scaleMode/imageTransform), clip, absolutos e ocultos, efeitos agrupados e lacunas. Le do cache (sem API se ja baixado)
 //   node figma-map.mjs coverage --url <url|fileKey> [--roots id,id]          offline: une as arvores do cache e lista os conteineres visiveis que NENHUMA cobre (truncados pela profundidade), arquivos vazios em raw/ e itens "feitos" invalidos; grava coverage.json; saida 1 se houver lacuna
+//   node figma-map.mjs index --url <url|fileKey>                             offline: recalcula do disco layoutDone, fxDone e status (complete|partial) do index.json; preserva os demais campos
+//   node figma-map.mjs preflight --url <url|fileKey>                         1 requisicao: confirma o token e mostra plano e tipo de limite ("low" = assento de visualizacao); saida 3 se estiver limitado
 //   (layout e fx aceitam --save <arquivo>: gravam so se o comando terminou bem, sem deixar arquivo vazio; use no lugar de `> arquivo`. Um no que esta dentro de outra arvore em cache e servido de la sem requisicao)
 //   (map/node aceitam --from-file <json> para trabalhar offline com uma resposta ja salva)
 // Limite de requisicoes (assento de visualizacao tem cota baixa): tudo que e baixado fica em figma-data/<fileKey>/raw/cache/ e nada e pedido duas vezes
 // (--refresh forca novo download); nos vao em lote; 429 curto espera, 429 longo PARA com codigo 3 e grava o bloqueio (chamadas seguintes falham na hora).
 // Variaveis: FIGMA_MIN_INTERVAL_MS (padrao 1000, intervalo entre requisicoes) e FIGMA_MAX_WAIT_SEC (padrao 30, maior espera aceita num 429).
-// Codigos de saida: 0 ok, 1 falha, 2 uso/token, 3 limite de requisicoes do Figma.
+// Codigos de saida: 0 ok, 1 falha, 2 uso/token, 3 limite de requisicoes do Figma, 4 outra chamada em andamento (trava raw/.lock).
 // Saida padrao: figma-data/<fileKey>/ na raiz do repositorio (raw/ = JSON bruto, refs/ = PNGs, assets/ = arquivos exportados).
 // Token: variavel de ambiente FIGMA_TOKEN ou, se ela nao existir, o arquivo
 // ~/.config/figma/.env (fora do repositorio, chmod 600), com a linha FIGMA_TOKEN=...
@@ -36,7 +38,7 @@ import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
-import { ApiError, RateLimitError, createClient, formatWait, NODES_PER_REQUEST } from './lib/figma-api.mjs';
+import { ApiError, BusyError, RateLimitError, createClient, formatWait, NODES_PER_REQUEST } from './lib/figma-api.mjs';
 import { writeAtomic } from './lib/atomic.mjs';
 import { cacheCoverage } from './lib/coverage.mjs';
 import { collectFx } from './lib/fx.mjs';
@@ -609,13 +611,7 @@ async function cmdSpec() {
 // ---------- coverage: o que ainda falta, calculado do que existe em disco (offline) ----------
 // Une todas as arvores do cache: so e lacuna o conteiner visivel truncado que NENHUMA arvore cobre. Alem disso aponta arquivos vazios
 // em raw/ e itens marcados como feitos no index.json sem o arquivo correspondente. Grava coverage.json. Saida 1 se houver lacuna.
-async function cmdCoverage() {
-  const key = fileKeyOf(opt('url'));
-  if (!key) {
-    console.error('coverage: informe --url <url|fileKey> [--roots id,id]');
-    process.exit(2);
-  }
-  const roots = opt('roots')?.split(',').map((s) => normalizeId(s.trim()));
+async function coverageReport(key, roots) {
   const entries = (await clientFor(key).loadAllCachedNodes()).filter((e) => !roots || roots.includes(e.id));
   const cov = cacheCoverage(entries);
   const raw = dataDir(key, 'raw');
@@ -628,14 +624,25 @@ async function cmdCoverage() {
     for (const [list, prefix] of [['layoutDone', 'layout'], ['fxDone', 'fx']]) {
       for (const id of index[list] ?? []) {
         const f = join(raw, `${prefix}-${id.replace(':', '-')}.txt`);
+        // So arquivo VAZIO invalida: o nome do arquivo por id e convencao do agente (alguns repositorios guardam tudo num layout.txt).
         if (existsSync(f) && statSync(f).size === 0) missingDone.push(`${list}: ${id} (arquivo vazio)`);
       }
     }
   }
+  const complete = !cov.gaps.length && !emptyFiles.length && !missingDone.length;
+  return { cov, emptyFiles, missingDone, complete, report: { generatedAt: new Date().toISOString(), status: complete ? 'complete' : 'partial', trees: cov.trees, nodes: cov.nodes, gaps: cov.gaps.map(({ id, name, type, path, from }) => ({ id, name, type, path, from })), hiddenTruncated: cov.hiddenTruncated, emptyFiles, missingDone } };
+}
+
+async function cmdCoverage() {
+  const key = fileKeyOf(opt('url'));
+  if (!key) {
+    console.error('coverage: informe --url <url|fileKey> [--roots id,id]');
+    process.exit(2);
+  }
+  const roots = opt('roots')?.split(',').map((s) => normalizeId(s.trim()));
+  const { cov, emptyFiles, missingDone, complete, report } = await coverageReport(key, roots);
   const byRoot = new Map();
   for (const g of cov.gaps) byRoot.set(g.from, (byRoot.get(g.from) ?? 0) + 1);
-  const complete = !cov.gaps.length && !emptyFiles.length && !missingDone.length;
-  const report = { generatedAt: new Date().toISOString(), status: complete ? 'complete' : 'partial', trees: cov.trees, nodes: cov.nodes, gaps: cov.gaps.map(({ id, name, type, path, from }) => ({ id, name, type, path, from })), hiddenTruncated: cov.hiddenTruncated, emptyFiles, missingDone };
   await writeAtomic(dataDir(key, 'coverage.json'), JSON.stringify(report, null, 2));
   console.log(`${cov.trees} arvore(s) em cache, ${cov.nodes} no(s) lidos. Status: ${report.status.toUpperCase()}.`);
   console.log(`Contêineres visíveis sem cobertura: ${cov.gaps.length}${byRoot.size ? ` (${[...byRoot].map(([r, n]) => `${r}: ${n}`).join('; ')})` : ''}. Ocultos truncados (ignorados): ${cov.hiddenTruncated}.`);
@@ -644,6 +651,71 @@ async function cmdCoverage() {
   missingDone.forEach((m) => console.log(`Marcado como feito mas inválido: ${m}`));
   console.log(`Relatório: ${dataDir(key, 'coverage.json')}`);
   if (!complete) process.exit(1);
+}
+
+// ---------- preflight: antes de extrair, descobre a cota (1 requisicao) ----------
+async function cmdPreflight() {
+  const key = fileKeyOf(opt('url'));
+  if (!key) {
+    console.error('preflight: informe --url <url|fileKey>');
+    process.exit(2);
+  }
+  const p = await clientFor(key).probe(key);
+  if (p.ok) {
+    console.log(`OK: o token le o arquivo ${key}. Plano: ${p.planTier ?? 'nao informado'}; tipo de limite: ${p.limitType ?? 'nao informado'}.`);
+    if (/low/i.test(p.limitType ?? '')) console.log('Atencao: limite "low" = conta com assento de VISUALIZACAO (cota pequena). Prefira o token de uma conta Dev/Full e extraia em pedacos (prefetch --max-requests).');
+    return;
+  }
+  if (p.status === 429) {
+    console.log(`LIMITADO (429). Plano: ${p.planTier ?? '?'}; tipo: ${p.limitType ?? '?'}; espera informada: ${p.retryAfterSec ? formatWait(p.retryAfterSec) : '?'}.`);
+    process.exit(3);
+  }
+  console.log(`Falha ${p.status}: ${{ 403: 'token invalido, escopo errado ou sem acesso ao arquivo', 404: 'arquivo nao encontrado' }[p.status] ?? 'erro da API'}.`);
+  process.exit(1);
+}
+
+// ---------- index: o estado da extracao calculado do disco, nao escrito a mao ----------
+// Reescreve em index.json so os campos que sao fatos do disco (layoutDone, fxDone, status, gaps, coverageAt) e preserva o resto.
+async function cmdIndex() {
+  const key = fileKeyOf(opt('url'));
+  if (!key) {
+    console.error('index: informe --url <url|fileKey>');
+    process.exit(2);
+  }
+  const raw = dataDir(key, 'raw');
+  // Parte do que o indice ja registra (o nome do arquivo por id e convencao do agente; nem todo repositorio a segue). Tira o id cujo
+  // arquivo existe e esta VAZIO (falso "feito") e acrescenta o id que tem arquivo preenchido. Nunca apaga o que nao da para provar.
+  const done = async (prefix, current = []) => {
+    const ids = new Set(current);
+    if (existsSync(raw)) {
+      const re = new RegExp('^' + prefix + '-(\\d+)-(.+)\\.txt$');
+      for (const f of await readdir(raw)) {
+        const m = re.exec(f);
+        if (!m) continue;
+        const id = m[1] + ':' + m[2];
+        if (statSync(join(raw, f)).size > 0) ids.add(id);
+        else ids.delete(id);
+      }
+    }
+    return [...ids].sort();
+  };
+  const indexFile = dataDir(key, 'index.json');
+  const index = existsSync(indexFile) ? JSON.parse(readFileSync(indexFile, 'utf8')) : { fileKey: key };
+  const layoutDone = await done('layout', index.layoutDone);
+  const fxDone = await done('fx', index.fxDone);
+  const prev = { layoutDone: index.layoutDone, fxDone: index.fxDone };
+  index.layoutDone = layoutDone;
+  index.fxDone = fxDone;
+  const { cov, emptyFiles } = await coverageReport(key, null);
+  const hasDesign = existsSync(dataDir(key, 'design-system.md'));
+  const gaps = cov.gaps.length + emptyFiles.length + (hasDesign ? 0 : 1);
+  index.status = gaps ? 'partial' : 'complete';
+  index.gaps = { containers: cov.gaps.length, emptyFiles: emptyFiles.length, designSystem: hasDesign ? 'ok' : 'ausente' };
+  index.coverageAt = new Date().toISOString();
+  await writeAtomic(indexFile, JSON.stringify(index, null, 2));
+  const diff = (a, b) => (JSON.stringify(a ?? []) === JSON.stringify(b) ? 'igual' : 'era ' + (a ?? []).length + ', agora ' + b.length);
+  console.log(`index.json: status ${index.status.toUpperCase()} (layoutDone: ${diff(prev.layoutDone, layoutDone)}; fxDone: ${diff(prev.fxDone, fxDone)}).`);
+  console.log(`Lacunas: ${cov.gaps.length} conteiner(es) sem cobertura, ${emptyFiles.length} arquivo(s) vazio(s), design-system.md ${hasDesign ? 'presente' : 'AUSENTE'}.`);
 }
 
 // Offline: nao usa token nem rede.
@@ -659,9 +731,9 @@ async function cmdStatus() {
   console.log(`Cache: ${s.cache.nodes} no(s)${s.cache.fileDepths.length ? `, arquivo em profundidade ${s.cache.fileDepths.join(', ')}` : ''}. Pasta: ${dataDir(key, 'raw', 'cache')}`);
 }
 
-const commands = { spec: cmdSpec, coverage: cmdCoverage, map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck, prefetch: cmdPrefetch, status: cmdStatus };
+const commands = { preflight: cmdPreflight, index: cmdIndex, spec: cmdSpec, coverage: cmdCoverage, map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck, prefetch: cmdPrefetch, status: cmdStatus };
 if (!commands[command]) {
-  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check|prefetch|status|spec|coverage> [opcoes]  (ver cabecalho do arquivo)');
+  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check|prefetch|status|spec|coverage|index|preflight> [opcoes]  (ver cabecalho do arquivo)');
   process.exit(2);
 }
 try {
@@ -672,6 +744,10 @@ try {
   if (e instanceof RateLimitError) {
     reportRateLimit(e);
     process.exit(3);
+  }
+  if (e instanceof BusyError) {
+    console.error(`Outra chamada ao Figma esta em andamento neste arquivo${e.pid ? ` (processo ${e.pid})` : ''}. Espere ela terminar: nao rode comandos do Figma em paralelo (a cota e a mesma). Se nenhum processo estiver rodando, a trava expira sozinha em 10 minutos.`);
+    process.exit(4);
   }
   if (e instanceof ApiError) {
     const hint = { 403: 'token invalido/sem acesso ao arquivo', 404: 'arquivo ou node nao encontrado' }[e.status] ?? '';

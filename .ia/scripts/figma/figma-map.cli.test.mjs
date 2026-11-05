@@ -38,6 +38,11 @@ before(async () => {
       const ids = u.searchParams.get('ids').split(',');
       return res.end(JSON.stringify({ nodes: Object.fromEntries(ids.map((id) => [id, { document: doc(id) }])) }));
     }
+    if (['/v1/files/PREKEY', `/v1/files/${KEY}`].includes(u.pathname)) {
+      res.setHeader('x-figma-plan-tier', 'enterprise');
+      res.setHeader('x-figma-rate-limit-type', 'high');
+      return res.end(JSON.stringify({ name: 'arq', document: { children: [] } }));
+    }
     res.statusCode = 404;
     res.end('{}');
   });
@@ -193,4 +198,42 @@ test('coverage acusa conteiner truncado no limite e o cobre quando outra arvore 
   writeFileSync(join(dir, '7-2.json'), JSON.stringify({ depth: 1, document: deep }));
   const covered = await run(['coverage', '--url', 'COVKEY'], { token: null });
   assert.equal(covered.code, 0, covered.stdout);
+});
+
+test('preflight confirma o token e mostra plano e tipo de limite com uma unica requisicao', async () => {
+  const ok = await run(['preflight', '--url', 'PREKEY']);
+  assert.equal(ok.code, 0, ok.stderr);
+  assert.match(ok.stdout, /OK: o token le o arquivo PREKEY. Plano: enterprise; tipo de limite: high/);
+  assert.equal(ok.hits, 1);
+});
+
+test('index recalcula do disco: tira o feito com arquivo vazio, mantem o que nao da para provar e marca parcial', async () => {
+  const dir = join(work, 'figma-data', 'IDXKEY');
+  mkdirSync(join(dir, 'raw'), { recursive: true });
+  writeFileSync(join(dir, 'raw', 'layout-2-2.txt'), 'algo');
+  writeFileSync(join(dir, 'raw', 'fx-3-3.txt'), '');
+  writeFileSync(join(dir, 'index.json'), JSON.stringify({ fileKey: 'IDXKEY', name: 'X', layoutDone: ['5:5'], fxDone: ['3:3'], extra: 'preservado' }));
+  const r = await run(['index', '--url', 'IDXKEY'], { token: null });
+  assert.equal(r.code, 0, r.stderr);
+  const idx = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8'));
+  assert.deepEqual(idx.layoutDone, ['2:2', '5:5']);
+  assert.deepEqual(idx.fxDone, [], 'fx-3-3.txt esta vazio: nao conta como feito');
+  assert.equal(idx.status, 'partial');
+  assert.equal(idx.extra, 'preservado');
+  assert.equal(idx.gaps.designSystem, 'ausente');
+  writeFileSync(join(dir, 'design-system.md'), '# ds');
+  rmSync(join(dir, 'raw', 'fx-3-3.txt'));
+  await run(['index', '--url', 'IDXKEY'], { token: null });
+  assert.equal(JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')).status, 'complete');
+});
+
+test('trava: com outra chamada em andamento no mesmo arquivo, sai com 4 sem tocar a API', async () => {
+  const dir = join(work, 'figma-data', 'LOCKKEY', 'raw');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, '.lock'), JSON.stringify({ pid: process.pid, at: Date.now() }));
+  const r = await run(['layout', '--url', 'LOCKKEY', '--ids', '8:1', '--depth', '2']);
+  assert.equal(r.code, 4);
+  assert.equal(r.hits, 0);
+  assert.match(r.stderr, /Outra chamada ao Figma esta em andamento/);
+  rmSync(join(dir, '.lock'));
 });
