@@ -16,6 +16,10 @@
 //   node figma-map.mjs prefetch --url <url|fileKey> (--ids a,b,c | --sections [--variants desktop-light,mobile-light]) [--depth 4] [--batch 20] [--max-requests N] [--dry-run]
 //                                                                            baixa nos em LOTE para o cache (raw/cache/); layout, fx e node passam a ler dele sem chamar a API. --sections usa raw/variants.json
 //   node figma-map.mjs status --url <url|fileKey>                            offline: bloqueio do Figma (429), requisicoes das ultimas 24h e o que ja esta em cache
+//   node figma-map.mjs spec --url <url|fileKey> --ids <secao>[,<secao>...] [--depth 4] [--stdout]
+//                                                                            especificacao por secao em figma-data/<fileKey>/spec/ (vai para o git): arvore com coordenadas relativas a secao, textos com tipografia, imagens (scaleMode/imageTransform), clip, absolutos e ocultos, efeitos agrupados e lacunas. Le do cache (sem API se ja baixado)
+//   node figma-map.mjs coverage --url <url|fileKey> [--roots id,id]          offline: une as arvores do cache e lista os conteineres visiveis que NENHUMA cobre (truncados pela profundidade), arquivos vazios em raw/ e itens "feitos" invalidos; grava coverage.json; saida 1 se houver lacuna
+//   (layout e fx aceitam --save <arquivo>: gravam so se o comando terminou bem, sem deixar arquivo vazio; use no lugar de `> arquivo`. Um no que esta dentro de outra arvore em cache e servido de la sem requisicao)
 //   (map/node aceitam --from-file <json> para trabalhar offline com uma resposta ja salva)
 // Limite de requisicoes (assento de visualizacao tem cota baixa): tudo que e baixado fica em figma-data/<fileKey>/raw/cache/ e nada e pedido duas vezes
 // (--refresh forca novo download); nos vao em lote; 429 curto espera, 429 longo PARA com codigo 3 e grava o bloqueio (chamadas seguintes falham na hora).
@@ -28,12 +32,15 @@
 // Nunca grave o token em arquivo do repositorio.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { parseManifest, planCalls, splitPending } from './lib/assets.mjs';
 import { ApiError, RateLimitError, createClient, formatWait, NODES_PER_REQUEST } from './lib/figma-api.mjs';
+import { writeAtomic } from './lib/atomic.mjs';
+import { cacheCoverage } from './lib/coverage.mjs';
 import { collectFx } from './lib/fx.mjs';
+import { buildSpec } from './lib/spec.mjs';
 import { extOf, resolveOriginal } from './lib/originals.mjs';
 import tls from 'node:tls';
 
@@ -246,11 +253,10 @@ async function cmdNode() {
 }
 
 // ---------- geometria e auto-layout (fonte da verdade escrita para comparar com o DOM) ----------
-function printLayout(root, depth) {
+function layoutText(root, depth) {
   const ox = root.absoluteBoundingBox.x;
   const oy = root.absoluteBoundingBox.y;
-  console.log(`${root.name} [${root.id}] ${Math.round(root.absoluteBoundingBox.width)}x${Math.round(root.absoluteBoundingBox.height)}  (x,y relativos ao no)`);
-  const lines = [];
+  const lines = [`${root.name} [${root.id}] ${Math.round(root.absoluteBoundingBox.width)}x${Math.round(root.absoluteBoundingBox.height)}  (x,y relativos ao no)`];
   (function visit(n, d) {
     const b = n.absoluteBoundingBox;
     if (b && d > 0 && ['FRAME', 'TEXT', 'GROUP', 'INSTANCE', 'COMPONENT', 'RECTANGLE'].includes(n.type)) {
@@ -266,7 +272,19 @@ function printLayout(root, depth) {
     }
     if (d < depth) for (const c of n.children ?? []) visit(c, d + 1);
   })(root, 0);
-  console.log(lines.join('\n'));
+  return lines.join('\n');
+}
+
+// Com --save <arquivo> o resultado e gravado so se o comando terminou bem (nunca sobra arquivo vazio) e a tela mostra uma linha.
+// Sem --save, imprime. O agente usa --save em vez de redirecionar a saida (`> arquivo`).
+async function emitOrSave(text, label) {
+  const file = opt('save');
+  if (!file) {
+    console.log(text);
+    return;
+  }
+  await writeAtomic(resolve(file), `${text}\n`);
+  console.log(`${label}: ${text.split('\n').length} linha(s) -> ${resolve(file)}`);
 }
 
 // Aceita varios nos em --ids: vao numa unica requisicao (e ficam em cache para o fx e o node).
@@ -280,16 +298,17 @@ async function cmdLayout() {
   }
   const data = src.fetch ? await clientFor(src.key).getNodes(src.key, ids, depth, { refresh: REFRESH }) : { nodes: Object.fromEntries(ids.map((id) => [id, { document: [...walk(src.document ?? src)].find((w) => w.node.id === id)?.node }])) };
   let missing = 0;
-  ids.forEach((id, i) => {
+  const blocks = [];
+  ids.forEach((id) => {
     const root = data.nodes?.[id]?.document;
     if (!root) {
       console.error(`layout: no ${id} nao encontrado`);
       missing++;
       return;
     }
-    if (ids.length > 1 && i > 0) console.log('');
-    printLayout(root, depth);
+    blocks.push(layoutText(root, depth));
   });
+  if (blocks.length) await emitOrSave(blocks.join('\n\n'), 'layout');
   if (missing) process.exit(1);
 }
 
@@ -347,17 +366,31 @@ async function cmdFx() {
   }
   const src = await load('fx');
   const data = await clientFor(src.key).getNodes(src.key, ids, depth, { refresh: REFRESH });
+  const lines = [];
   for (const id of ids) {
     const doc = data.nodes?.[id]?.document;
     if (!doc) {
-      console.log(`${id}: nao encontrado`);
+      lines.push(`${id}: nao encontrado`);
       continue;
     }
     const found = collectFx(doc, depth);
-    if (rest.includes('--json')) console.log(JSON.stringify({ id, found }, null, 2));
-    else if (!found.length) console.log(`${id} ${doc.name}: nada notavel (sem rotacao, blend, filtro, efeito nem trecho de texto com estilo proprio)`);
-    else found.forEach((n) => console.log(`${n.id}  ${n.type}  ${n.path}\n    ${JSON.stringify(n.fx)}`));
+    if (rest.includes('--json')) lines.push(JSON.stringify({ id, found }, null, 2));
+    else if (!found.length) lines.push(`${id} ${doc.name}: nada notavel (sem rotacao, blend, filtro, efeito nem trecho de texto com estilo proprio)`);
+    else {
+      // Mesmo efeito em varios nos (ex.: cornerRadius 16 em 28 botoes) vira uma linha so: as excecoes ficam visiveis.
+      const groups = new Map();
+      for (const n of found) {
+        const k = JSON.stringify(n.fx);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(n);
+      }
+      for (const [k, nodes] of groups) {
+        if (nodes.length === 1) lines.push(`${nodes[0].id}  ${nodes[0].type}  ${nodes[0].path}\n    ${k}`);
+        else lines.push(`${nodes.length} nos iguais: ${k}\n    ${nodes.map((n) => n.id).join(', ')}`);
+      }
+    }
   }
+  await emitOrSave(lines.join('\n'), 'fx');
 }
 
 // ---------- imagem de referencia (render do Figma) ----------
@@ -549,6 +582,83 @@ async function cmdPrefetch() {
   if (out.pending.length) console.log(`PENDENTES (${out.pending.length}, limite --max-requests ${maxRequests}): rode o mesmo comando de novo para continuar: ${out.pending.join(',')}`);
 }
 
+// ---------- spec: especificacao por secao, lida do cache ----------
+// Gera figma-data/<fileKey>/spec/<secao>-<id>.md (vai para o git; o raw/ nao): arvore com coordenadas relativas a secao, textos com
+// tipografia, imagens (scaleMode/imageTransform), clip, absolutos e ocultos, efeitos agrupados e as lacunas de profundidade.
+// O programmer le SO isso. Baixa o que faltar no cache (uma requisicao em lote); com tudo em cache nao usa a API nem o token.
+const slug = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'no';
+
+async function cmdSpec() {
+  const key = fileKeyOf(opt('url'));
+  const ids = opt('ids', '').split(',').map((s) => s.trim()).filter(Boolean).map(normalizeId);
+  if (!key || !ids.length) {
+    console.error('spec: informe --url <url|fileKey> --ids <secao>[,<secao>...] [--depth 4] [--stdout]');
+    process.exit(2);
+  }
+  const depth = Number(opt('depth', 4));
+  const c = clientFor(key);
+  const data = await c.getNodes(key, ids, depth, { refresh: REFRESH });
+  let missing = 0;
+  for (const id of ids) {
+    const doc = data.nodes?.[id]?.document;
+    if (!doc) {
+      console.error(`spec: no ${id} nao encontrado`);
+      missing++;
+      continue;
+    }
+    const { markdown, gaps } = buildSpec(doc, { depth: (await c.cachedDepth(id)) ?? depth, key, generatedAt: new Date().toISOString().slice(0, 10) });
+    if (rest.includes('--stdout')) {
+      console.log(markdown);
+      continue;
+    }
+    const file = dataDir(key, 'spec', `${slug(doc.name)}-${id.replace(':', '-')}.md`);
+    await writeAtomic(file, markdown);
+    const open = gaps.truncated.filter((t) => !t.hidden).length;
+    console.log(`${id.padEnd(10)} ${doc.name}: ${markdown.split('\n').length} linhas -> ${file}${open ? `  [${open} contêiner(es) truncado(s): veja "Lacunas"]` : ''}`);
+  }
+  if (missing) process.exit(1);
+}
+
+// ---------- coverage: o que ainda falta, calculado do que existe em disco (offline) ----------
+// Une todas as arvores do cache: so e lacuna o conteiner visivel truncado que NENHUMA arvore cobre. Alem disso aponta arquivos vazios
+// em raw/ e itens marcados como feitos no index.json sem o arquivo correspondente. Grava coverage.json. Saida 1 se houver lacuna.
+async function cmdCoverage() {
+  const key = fileKeyOf(opt('url'));
+  if (!key) {
+    console.error('coverage: informe --url <url|fileKey> [--roots id,id]');
+    process.exit(2);
+  }
+  const roots = opt('roots')?.split(',').map((s) => normalizeId(s.trim()));
+  const entries = (await clientFor(key).loadAllCachedNodes()).filter((e) => !roots || roots.includes(e.id));
+  const cov = cacheCoverage(entries);
+  const raw = dataDir(key, 'raw');
+  const emptyFiles = [];
+  if (existsSync(raw)) for (const f of await readdir(raw)) if (/\.(txt|json|md)$/.test(f) && statSync(join(raw, f)).size === 0) emptyFiles.push(f);
+  const missingDone = [];
+  const indexFile = dataDir(key, 'index.json');
+  if (existsSync(indexFile)) {
+    const index = JSON.parse(readFileSync(indexFile, 'utf8'));
+    for (const [list, prefix] of [['layoutDone', 'layout'], ['fxDone', 'fx']]) {
+      for (const id of index[list] ?? []) {
+        const f = join(raw, `${prefix}-${id.replace(':', '-')}.txt`);
+        if (existsSync(f) && statSync(f).size === 0) missingDone.push(`${list}: ${id} (arquivo vazio)`);
+      }
+    }
+  }
+  const byRoot = new Map();
+  for (const g of cov.gaps) byRoot.set(g.from, (byRoot.get(g.from) ?? 0) + 1);
+  const complete = !cov.gaps.length && !emptyFiles.length && !missingDone.length;
+  const report = { generatedAt: new Date().toISOString(), status: complete ? 'complete' : 'partial', trees: cov.trees, nodes: cov.nodes, gaps: cov.gaps.map(({ id, name, type, path, from }) => ({ id, name, type, path, from })), hiddenTruncated: cov.hiddenTruncated, emptyFiles, missingDone };
+  await writeAtomic(dataDir(key, 'coverage.json'), JSON.stringify(report, null, 2));
+  console.log(`${cov.trees} arvore(s) em cache, ${cov.nodes} no(s) lidos. Status: ${report.status.toUpperCase()}.`);
+  console.log(`Contêineres visíveis sem cobertura: ${cov.gaps.length}${byRoot.size ? ` (${[...byRoot].map(([r, n]) => `${r}: ${n}`).join('; ')})` : ''}. Ocultos truncados (ignorados): ${cov.hiddenTruncated}.`);
+  if (cov.gaps.length) console.log(`  Exemplos: ${cov.gaps.slice(0, 5).map((g) => `${g.name} [${g.id}]`).join('; ')}. Para cobrir, baixe a raiz ("de") com --depth maior (1 requisicao) e rode o coverage de novo.`);
+  if (emptyFiles.length) console.log(`Arquivos vazios em raw/ (refaça com --save): ${emptyFiles.join(', ')}`);
+  missingDone.forEach((m) => console.log(`Marcado como feito mas inválido: ${m}`));
+  console.log(`Relatório: ${dataDir(key, 'coverage.json')}`);
+  if (!complete) process.exit(1);
+}
+
 // Offline: nao usa token nem rede.
 async function cmdStatus() {
   const key = fileKeyOf(opt('url'));
@@ -562,9 +672,9 @@ async function cmdStatus() {
   console.log(`Cache: ${s.cache.nodes} no(s)${s.cache.fileDepths.length ? `, arquivo em profundidade ${s.cache.fileDepths.join(', ')}` : ''}. Pasta: ${dataDir(key, 'raw', 'cache')}`);
 }
 
-const commands = { map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck, prefetch: cmdPrefetch, status: cmdStatus };
+const commands = { spec: cmdSpec, coverage: cmdCoverage, map: cmdMap, find: cmdFind, node: cmdNode, layout: cmdLayout, variants: cmdVariants, image: cmdImage, assets: cmdAssets, fx: cmdFx, check: cmdCheck, prefetch: cmdPrefetch, status: cmdStatus };
 if (!commands[command]) {
-  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check|prefetch|status> [opcoes]  (ver cabecalho do arquivo)');
+  console.error('Uso: node figma-map.mjs <map|find|node|layout|variants|image|assets|fx|check|prefetch|status|spec|coverage> [opcoes]  (ver cabecalho do arquivo)');
   process.exit(2);
 }
 try {

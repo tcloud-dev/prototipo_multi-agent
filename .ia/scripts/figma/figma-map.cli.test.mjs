@@ -2,7 +2,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -141,4 +141,56 @@ test('prefetch --sections le raw/variants.json, filtra por variante e nao repete
   const missing = await run(['prefetch', '--url', 'OUTRA', '--sections', '--dry-run']);
   assert.equal(missing.code, 2);
   assert.match(missing.stderr, /rode antes/);
+});
+
+test('layout --save grava o arquivo so no sucesso e nao deixa temporario nem arquivo vazio', async () => {
+  const out = join(work, 'saida', 'layout-1-1.txt');
+  const r = await run(['layout', '--url', KEY, '--ids', '1:1', '--depth', '2', '--save', out]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /layout: \d+ linha\(s\) ->/);
+  assert.ok(existsSync(out) && statSync(out).size > 0);
+  assert.equal(readdirSync(join(work, 'saida')).filter((f) => f.endsWith('.tmp')).length, 0);
+
+  const fail = await run(['layout', '--url', KEY, '--ids', '404:404', '--depth', '2', '--save', join(work, 'saida', 'nunca.txt')]);
+  assert.notEqual(fail.code, 0);
+  assert.ok(!existsSync(join(work, 'saida', 'nunca.txt')), 'falhou: nao cria arquivo vazio');
+});
+
+test('spec gera o arquivo da secao a partir do cache, sem API nem token', async () => {
+  const r = await run(['spec', '--url', KEY, '--ids', '1:1,1:2', '--depth', '2'], { token: null });
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.hits, 0);
+  const files = readdirSync(join(work, 'figma-data', KEY, 'spec'));
+  assert.deepEqual(files.sort(), ['secao-1-1-1-1.md', 'secao-1-2-1-2.md']);
+  const md = readFileSync(join(work, 'figma-data', KEY, 'spec', 'secao-1-1-1-1.md'), 'utf8');
+  assert.match(md, /# Secao 1:1 \[1:1\]/);
+  assert.match(md, /Titulo \[1:1-c\] text/);
+});
+
+test('coverage: completo quando nao ha lacuna; parcial (saida 1) com arquivo vazio em raw/', async () => {
+  const ok = await run(['coverage', '--url', KEY, '--roots', '1:1'], { token: null });
+  assert.equal(ok.code, 0, ok.stdout + ok.stderr);
+  assert.match(ok.stdout, /Status: COMPLETE/);
+  assert.equal(JSON.parse(readFileSync(join(work, 'figma-data', KEY, 'coverage.json'), 'utf8')).status, 'complete');
+
+  writeFileSync(join(work, 'figma-data', KEY, 'raw', 'fx-9-9.txt'), '');
+  const bad = await run(['coverage', '--url', KEY, '--roots', '1:1'], { token: null });
+  assert.equal(bad.code, 1);
+  assert.match(bad.stdout, /Status: PARTIAL/);
+  assert.match(bad.stdout, /fx-9-9\.txt/);
+  rmSync(join(work, 'figma-data', KEY, 'raw', 'fx-9-9.txt'));
+});
+
+test('coverage acusa conteiner truncado no limite e o cobre quando outra arvore em cache o tem completo', async () => {
+  const dir = join(work, 'figma-data', 'COVKEY', 'raw', 'cache', 'nodes');
+  mkdirSync(dir, { recursive: true });
+  const shallow = { id: '7:1', name: 'raso', type: 'FRAME', children: [{ id: '7:2', name: 'botao', type: 'INSTANCE', children: [] }] };
+  writeFileSync(join(dir, '7-1.json'), JSON.stringify({ depth: 1, document: shallow }));
+  const gap = await run(['coverage', '--url', 'COVKEY'], { token: null });
+  assert.equal(gap.code, 1);
+  assert.match(gap.stdout, /sem cobertura: 1/);
+  const deep = { id: '7:2', name: 'botao', type: 'INSTANCE', children: [{ id: '7:3', name: 'rotulo', type: 'TEXT' }] };
+  writeFileSync(join(dir, '7-2.json'), JSON.stringify({ depth: 1, document: deep }));
+  const covered = await run(['coverage', '--url', 'COVKEY'], { token: null });
+  assert.equal(covered.code, 0, covered.stdout);
 });
