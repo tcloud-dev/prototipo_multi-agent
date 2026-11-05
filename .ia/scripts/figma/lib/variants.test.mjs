@@ -10,13 +10,13 @@ const page = {
   name: 'Landing page',
   type: 'CANVAS',
   children: [
-    frame('2:1', 'Pagina inicial', 2178, 5890, [frame('3:1', 'T-Cloud LP', 1920, 1080, [frame('4:1', 'header', 1920, 104), frame('4:2', 'hero', 1920, 732)]), frame('3:2', 'list', 1760, 700, [frame('5:1', 'item-1', 350, 622), frame('5:2', 'item-2', 350, 622)])], 'SECTION'),
+    frame('2:1', 'Pagina inicial', 2178, 5890, [frame('3:1', 'T-Cloud LP', 1920, 1080, [frame('4:1', 'header', 1920, 104), frame('4:2', 'hero', 1920, 732)]), frame('3:2', 'list', 1760, 300, [frame('5:1', 'item-1', 350, 622), frame('5:2', 'item-2', 350, 622)])], 'SECTION'),
   ],
 };
 
 test('pageLikeFrames estrito: acha frames de pagina dentro de SECTION e nao desce em FRAME (os cards 350x622 ficam de fora)', () => {
-  // `list` (1760x700) tambem parece pagina pelo tamanho e entra como candidato; os cards de dentro dele nao.
-  assert.deepEqual(pageLikeFrames(page, [], true).map((f) => f.id), ['3:1', '3:2']);
+  // `list` (1760x300) e baixo demais para ser pagina; os cards de 350x622 dentro dele nao podem virar variante.
+  assert.deepEqual(pageLikeFrames(page, [], true).map((f) => f.id), ['3:1']);
   // O modo antigo (usado so no map, informativo) ainda os enxerga.
   assert.deepEqual(pageLikeFrames(page, [], false).map((f) => f.id), ['3:1', '5:1', '5:2']);
 });
