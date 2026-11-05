@@ -41,6 +41,7 @@ import { writeAtomic } from './lib/atomic.mjs';
 import { cacheCoverage } from './lib/coverage.mjs';
 import { collectFx } from './lib/fx.mjs';
 import { buildSpec } from './lib/spec.mjs';
+import { buildVariants, pageLikeFrames } from './lib/variants.mjs';
 import { extOf, resolveOriginal } from './lib/originals.mjs';
 import tls from 'node:tls';
 
@@ -144,17 +145,6 @@ function pageKind(page, totalPages) {
   if (nodes > SMALL) return nameHint ? `content (nome sugere ${nameHint === 'library' ? 'biblioteca' : 'capa'}, mas tem ${nodes} nos)` : 'content';
   if (nameHint) return nameHint;
   return nodes <= 1 ? 'cover?' : 'content';
-}
-
-// Frames com "cara de pagina do site" (largura de viewport, altura de pagina), no nivel mais alto em que
-// aparecem. Mostra onde o site mora mesmo quando tudo esta numa pagina so, dentro de grupos e secoes.
-function pageLikeFrames(node, acc = []) {
-  for (const c of node.children ?? []) {
-    const b = c.absoluteBoundingBox;
-    if (['FRAME', 'COMPONENT', 'COMPONENT_SET'].includes(c.type) && b && b.width >= 320 && b.width <= 1920 && b.height >= 400) acc.push(c);
-    else pageLikeFrames(c, acc);
-  }
-  return acc;
 }
 
 function tree(node, maxDepth, depth = 0, lines = []) {
@@ -315,43 +305,40 @@ async function cmdLayout() {
 // ---------- variantes do design ----------
 // Um arquivo de design costuma ter a mesma pagina em varias variantes (desktop/mobile x light/dark), lado a lado
 // na pagina de conteudo. Infere o dispositivo e o tema pelo nome do frame (e pela largura) e lista as secoes de cada um.
-function variantOf(frame) {
-  const n = frame.name.toLowerCase();
-  const w = frame.absoluteBoundingBox?.width ?? 0;
-  const device = /mobile|iphone|android|phone|celular/.test(n) ? 'mobile' : /tablet|ipad/.test(n) ? 'tablet' : /desktop|laptop|web|notebook/.test(n) ? 'desktop' : w <= 480 ? 'mobile' : w <= 1024 ? 'tablet' : 'desktop';
-  const theme = /dark|escuro/.test(n) ? 'dark' : 'light';
-  const overlay = /\b(menu|modal|overlay|drawer)\b/.test(n) ? '-menu' : '';
-  return `${device}-${theme}${overlay}`;
-}
-
 async function cmdVariants() {
   const src = await load('variants');
   const file = src.fetch ? await clientFor(src.key).getFile(src.key, 3, { exact: true, refresh: REFRESH }) : src;
   const key = src.key ?? fileKeyOf(opt('url')) ?? 'offline';
   const out = resolve(opt('out', dataDir(key, 'raw')));
   await mkdir(out, { recursive: true });
-  const frames = file.document.children.flatMap((p) => pageLikeFrames(p).map((f) => ({ page: p.name, frame: f })));
+  const pages = file.document.children;
+  // Variante vem de frame de pagina no topo (pagina, SECTION, GROUP); pagina de capa/biblioteca nao entra (fica em "ignoradas").
+  const skippedPages = [];
+  const usable = pages.filter((p) => {
+    const kind = pageKind(p, pages.length);
+    if (kind === 'cover?' || kind === 'library') skippedPages.push(`${p.name} (${kind})`);
+    return !(kind === 'cover?' || kind === 'library');
+  });
+  let frames = usable.flatMap((p) => pageLikeFrames(p, [], true).map((f) => ({ page: p.name, frame: f })));
+  let fallback = false;
+  if (!frames.length) {
+    // Design com as paginas dentro de um FRAME de embrulho: procura em qualquer profundidade, mas avisa (pode pegar cards).
+    frames = usable.flatMap((p) => pageLikeFrames(p, [], false).map((f) => ({ page: p.name, frame: f })));
+    fallback = frames.length > 0;
+  }
   const ids = frames.map((x) => x.frame.id);
   // Pedido em lote com profundidade 2 para ter os filhos diretos (as secoes) de todos os frames.
   const detail = src.fetch && ids.length ? await clientFor(src.key).getNodes(src.key, ids, 2, { refresh: REFRESH }) : null;
-  const result = { fileKey: key, name: file.name, variants: {} };
-  // Frames com dispositivo E tema escritos no nome tem prioridade na chave (um "Group" de capa nao pode tomar `desktop-light`).
-  const explicit = (f) => Number(/mobile|iphone|android|phone|celular|tablet|ipad|desktop|laptop|web|notebook/i.test(f.name)) + Number(/dark|escuro|light|claro/i.test(f.name));
-  const ordered = frames.map((x) => ({ ...x, full: detail?.nodes?.[x.frame.id]?.document ?? x.frame })).sort((a, b) => explicit(b.full) - explicit(a.full));
-  for (const { page, frame, full } of ordered) {
-    let v = variantOf(full);
-    while (result.variants[v]) v += '+';
-    result.variants[v] = {
-      inferred: explicit(full) < 2, frameId: frame.id, frameName: full.name, page, width: Math.round(full.absoluteBoundingBox?.width ?? 0), height: Math.round(full.absoluteBoundingBox?.height ?? 0),
-      sections: (full.children ?? []).map((c) => ({ name: c.name, id: c.id, type: c.type, width: Math.round(c.absoluteBoundingBox?.width ?? 0), height: Math.round(c.absoluteBoundingBox?.height ?? 0) })),
-    };
-  }
+  const result = { fileKey: key, name: file.name, variants: buildVariants(frames.map((x) => ({ ...x, full: detail?.nodes?.[x.frame.id]?.document ?? x.frame }))), ...(skippedPages.length ? { skippedPages } : {}), ...(fallback ? { warning: 'nenhum frame de pagina no topo; busca em qualquer profundidade (pode incluir cards e componentes): confira cada variante' } : {}) };
   await writeFile(join(out, 'variants.json'), JSON.stringify(result, null, 2));
   console.log(`${file.name}: ${Object.keys(result.variants).length} variante(s)\n`);
   for (const [k, v] of Object.entries(result.variants)) {
     console.log(`${k.padEnd(18)} ${v.frameId.padEnd(9)} ${v.width}x${v.height}  "${v.frameName}"  (pagina "${v.page}")${v.inferred ? '  [inferido: nome sem dispositivo/tema explicitos]' : ''}`);
     console.log(`  secoes: ${v.sections.map((s) => `${s.name} [${s.id} ${s.height}px]`).join(', ') || '(nenhuma no nivel direto)'}`);
+    if (v.alternatives?.length) console.log(`  outros frames com o mesmo nome de variante (ignorados no prefetch): ${v.alternatives.map((a) => `${a.frameName} [${a.frameId}]`).join(', ')}`);
   }
+  if (skippedPages.length) console.log(`\nPaginas ignoradas (capa/biblioteca): ${skippedPages.join(', ')}`);
+  if (result.warning) console.log(`\nATENCAO: ${result.warning}`);
   console.log(`\nJSON: ${join(out, 'variants.json')}`);
 }
 
