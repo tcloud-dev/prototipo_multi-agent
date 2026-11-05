@@ -7,10 +7,11 @@
 //  - cada requisicao real e registrada em api-calls.log, para o agente saber quanto da cota ja gastou.
 // Tudo que depende do ambiente (fetch, relogio, espera, token) e injetavel, para teste.
 import { existsSync } from 'node:fs';
-import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const NODES_PER_REQUEST = 20;
+const LOCK_STALE_MS = 10 * 60 * 1000;
 
 export class RateLimitError extends Error {
   constructor(retryAfterSec, info = {}) {
@@ -18,6 +19,14 @@ export class RateLimitError extends Error {
     this.name = 'RateLimitError';
     this.retryAfterSec = retryAfterSec;
     this.info = info;
+  }
+}
+
+export class BusyError extends Error {
+  constructor(pid) {
+    super('outra chamada ao Figma esta em andamento');
+    this.name = 'BusyError';
+    this.pid = pid;
   }
 }
 
@@ -88,7 +97,45 @@ export function createClient({
     if (wait > 0) await sleep(wait);
   }
 
+  // Uma chamada por vez por arquivo Figma: o arquivo .lock em raw/ impede que dois comandos (ex.: o agente disparando em paralelo)
+  // gastem a cota juntos. Trava velha (processo morto ou mais de LOCK_STALE_MS) e retomada.
+  const lockPath = stateDir ? join(stateDir, '.lock') : null;
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return e.code === 'EPERM';
+    }
+  };
+  async function acquireLock() {
+    if (!lockPath) return () => {};
+    await mkdir(stateDir, { recursive: true });
+    for (let tries = 0; tries < 2; tries++) {
+      try {
+        await writeFile(lockPath, JSON.stringify({ pid: process.pid, at: now() }), { flag: 'wx' });
+        return () => rm(lockPath, { force: true });
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        const held = await readJsonSafe(lockPath);
+        const stale = !held || !alive(held.pid) || now() - (held.at ?? 0) > LOCK_STALE_MS;
+        if (!stale && held.pid !== process.pid) throw new BusyError(held.pid);
+        await rm(lockPath, { force: true });
+      }
+    }
+    throw new BusyError(null);
+  }
+
   async function request(path) {
+    const release = await acquireLock();
+    try {
+      return await requestLocked(path);
+    } finally {
+      await release();
+    }
+  }
+
+  async function requestLocked(path) {
     const token = getToken();
     for (let attempt = 0; ; attempt++) {
       await assertNotBlocked();
@@ -257,6 +304,30 @@ export function createClient({
     };
   }
 
+  // Uma chamada leve ao arquivo para saber, ANTES de extrair, se o token funciona e que cota ele tem. Devolve status e os cabecalhos
+  // de plano/limite (mesmo em 429); nao grava bloqueio nem espera: quem decide o que fazer e o chamador.
+  async function probe(key) {
+    const release = await acquireLock();
+    try {
+      await assertNotBlocked();
+      await pace();
+      const res = await fetchFn(`${baseUrl}/files/${key}?depth=1`, { headers: { 'X-Figma-Token': getToken() } });
+      stats.requests++;
+      const at = now();
+      if (logPath) {
+        await mkdir(stateDir, { recursive: true });
+        await appendFile(logPath, `${new Date(at).toISOString()}	${res.status}	/files/${key}?depth=1 (preflight)
+`);
+      }
+      await saveState({ lastRequestAt: at });
+      const header = (name) => res.headers?.get?.(name) ?? null;
+      const retryAfter = Number(header('retry-after'));
+      return { status: res.status, ok: res.ok, planTier: header('x-figma-plan-tier'), limitType: header('x-figma-rate-limit-type'), retryAfterSec: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null };
+    } finally {
+      await release();
+    }
+  }
+
   // Profundidade com que o no foi baixado (a que vale para saber o que ficou truncado), ou null se nao esta em cache.
   async function cachedDepth(id) {
     if (!cacheDir) return null;
@@ -277,5 +348,5 @@ export function createClient({
     return entries;
   }
 
-  return { request, getNodes, planNodes, getFile, status, stats, cachedDepth, loadAllCachedNodes };
+  return { request, getNodes, planNodes, getFile, status, stats, cachedDepth, loadAllCachedNodes, probe };
 }

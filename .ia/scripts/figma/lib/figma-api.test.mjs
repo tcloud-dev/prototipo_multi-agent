@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ApiError, createClient, formatWait, NODES_PER_REQUEST, RateLimitError } from './figma-api.mjs';
+import { ApiError, BusyError, createClient, formatWait, NODES_PER_REQUEST, RateLimitError } from './figma-api.mjs';
 
 // Resposta simulada. `headers` aceita um objeto simples.
 const res = (status, body = {}, headers = {}) => ({
@@ -251,5 +251,31 @@ test('no dentro de outra arvore em cache sai de la, com a profundidade que sobra
   // Pedir 3 niveis a partir da secao excede o que o cache tem: vai a API.
   await client.getNodes('K', ['2:2'], 3);
   assert.equal(calls.length, 1);
+  done();
+});
+
+test('trava: segunda chamada enquanto outra esta em andamento falha na hora; trava de processo morto e retomada', async () => {
+  const { client, calls, dir, done } = setup([res(200, nodesBody('1:1')), res(200, nodesBody('2:2'))]);
+  mkdirSync(dir, { recursive: true });
+  // Trava de outro processo vivo (o pai do teste) e recente: ocupado.
+  writeFileSync(join(dir, '.lock'), JSON.stringify({ pid: process.ppid, at: 1_000_000_000_000 }));
+  await assert.rejects(() => client.request('/files/K/nodes?ids=1:1'), (e) => e instanceof BusyError && e.pid === process.ppid);
+  assert.equal(calls.length, 0, 'nem chegou a API');
+  // Processo inexistente: trava velha, retoma.
+  writeFileSync(join(dir, '.lock'), JSON.stringify({ pid: 2_000_000_000, at: 1_000_000_000_000 }));
+  await client.request('/files/K/nodes?ids=2:2');
+  assert.equal(calls.length, 1);
+  assert.ok(!existsSync(join(dir, '.lock')), 'libera a trava no fim');
+  done();
+});
+
+test('probe: devolve status, plano e tipo de limite mesmo em 429, sem gravar bloqueio', async () => {
+  const { client, dir, done } = setup([res(429, {}, { 'retry-after': '398997', 'x-figma-plan-tier': 'pro', 'x-figma-rate-limit-type': 'low' }), res(200, {}, { 'x-figma-plan-tier': 'enterprise', 'x-figma-rate-limit-type': 'high' })]);
+  const limited = await client.probe('K');
+  assert.deepEqual({ status: limited.status, ok: limited.ok, plan: limited.planTier, type: limited.limitType, wait: limited.retryAfterSec }, { status: 429, ok: false, plan: 'pro', type: 'low', wait: 398997 });
+  assert.ok(!existsSync(join(dir, 'rate-limit.json')) || !JSON.parse(readFileSync(join(dir, 'rate-limit.json'), 'utf8')).blockedUntil, 'probe nao bloqueia');
+  const ok = await client.probe('K');
+  assert.equal(ok.ok, true);
+  assert.equal(ok.limitType, 'high');
   done();
 });
