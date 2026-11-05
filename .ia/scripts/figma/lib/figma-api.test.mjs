@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ApiError, createClient, formatWait, NODES_PER_REQUEST, RateLimitError } from './figma-api.mjs';
+import { ApiError, BusyError, createClient, formatWait, NODES_PER_REQUEST, RateLimitError } from './figma-api.mjs';
 
 // Resposta simulada. `headers` aceita um objeto simples.
 const res = (status, body = {}, headers = {}) => ({
@@ -236,4 +236,46 @@ test('planNodes respeita batchSize', async () => {
   const plan = await t.client.planNodes(['1:1', '1:2', '1:3', '1:4', '1:5'], 3, { batchSize: 2 });
   assert.equal(plan.requests, 3);
   t.done();
+});
+
+test('no dentro de outra arvore em cache sai de la, com a profundidade que sobra; mais fundo que isso pede a API', async () => {
+  const { client, calls, dir, done } = setup([res(200, nodesBody('2:2'))]);
+  const parent = { id: '1:1', name: 'pagina', type: 'FRAME', children: [{ id: '2:2', name: 'secao', type: 'FRAME', children: [{ id: '3:3', name: 'card', type: 'FRAME', children: [{ id: '4:4', name: 'texto', type: 'TEXT' }] }] }] };
+  mkdirSync(join(dir, 'cache', 'nodes'), { recursive: true });
+  writeFileSync(join(dir, 'cache', 'nodes', '1-1.json'), JSON.stringify({ depth: 3, document: parent }));
+  // 2:2 esta no nivel 1 de uma arvore de profundidade 3: sobram 2 niveis.
+  const shallow = await client.getNodes('K', ['2:2'], 2);
+  assert.equal(calls.length, 0, 'servido pela arvore da pagina');
+  assert.equal(shallow.nodes['2:2'].document.children[0].id, '3:3');
+  assert.equal(await client.cachedDepth('2:2'), 2);
+  // Pedir 3 niveis a partir da secao excede o que o cache tem: vai a API.
+  await client.getNodes('K', ['2:2'], 3);
+  assert.equal(calls.length, 1);
+  done();
+});
+
+test('trava: segunda chamada enquanto outra esta em andamento falha na hora; trava de processo morto e retomada', async () => {
+  const { client, calls, dir, done } = setup([res(200, nodesBody('1:1')), res(200, nodesBody('2:2'))]);
+  mkdirSync(dir, { recursive: true });
+  // Trava de outro processo vivo (o pai do teste) e recente: ocupado.
+  writeFileSync(join(dir, '.lock'), JSON.stringify({ pid: process.ppid, at: 1_000_000_000_000 }));
+  await assert.rejects(() => client.request('/files/K/nodes?ids=1:1'), (e) => e instanceof BusyError && e.pid === process.ppid);
+  assert.equal(calls.length, 0, 'nem chegou a API');
+  // Processo inexistente: trava velha, retoma.
+  writeFileSync(join(dir, '.lock'), JSON.stringify({ pid: 2_000_000_000, at: 1_000_000_000_000 }));
+  await client.request('/files/K/nodes?ids=2:2');
+  assert.equal(calls.length, 1);
+  assert.ok(!existsSync(join(dir, '.lock')), 'libera a trava no fim');
+  done();
+});
+
+test('probe: devolve status, plano e tipo de limite mesmo em 429, sem gravar bloqueio', async () => {
+  const { client, dir, done } = setup([res(429, {}, { 'retry-after': '398997', 'x-figma-plan-tier': 'pro', 'x-figma-rate-limit-type': 'low' }), res(200, {}, { 'x-figma-plan-tier': 'enterprise', 'x-figma-rate-limit-type': 'high' })]);
+  const limited = await client.probe('K');
+  assert.deepEqual({ status: limited.status, ok: limited.ok, plan: limited.planTier, type: limited.limitType, wait: limited.retryAfterSec }, { status: 429, ok: false, plan: 'pro', type: 'low', wait: 398997 });
+  assert.ok(!existsSync(join(dir, 'rate-limit.json')) || !JSON.parse(readFileSync(join(dir, 'rate-limit.json'), 'utf8')).blockedUntil, 'probe nao bloqueia');
+  const ok = await client.probe('K');
+  assert.equal(ok.ok, true);
+  assert.equal(ok.limitType, 'high');
+  done();
 });
