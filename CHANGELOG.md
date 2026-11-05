@@ -2,7 +2,7 @@
 
 Formato: uma seção por versão (`## X.Y.Z - AAAA-MM-DD`), com Adicionado, Alterado e Corrigido. Processo em `RELEASING.md`.
 
-## Não lançado
+## 0.4.0 - 2026-11-05
 
 ### Adicionado
 
