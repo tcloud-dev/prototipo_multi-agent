@@ -43,6 +43,8 @@ Grave em **`reports/qa/<id>/report.md`** (um arquivo por rodada; **antes de grav
 - **Esperado:** divergências já aprovadas, uma linha cada.
 - Para cada item, uma linha de **proposta de correção** e o campo **Ação** (regra abaixo).
 - Termine com três listas: itens **automáticos**, itens que **dependem do usuário** e itens **ignorados** (uma linha cada, para o usuário poder contestar).
+- **Sem nota percentual por seção** ("Hero 65%"): não há critério reproduzível por trás. Resuma cada seção em contagens (itens de severidade alta, média e baixa; abertos e fechados). Só informe percentual se for uma medida calculada (ex.: pixels fora da tolerância num diff) e diga como foi calculada.
+- **Corte e sobreposição também são defeito:** compare o `clip` de cada contêiner do `spec/` (`clipsContent` do Figma) com o `overflow` renderizado, e a imagem que aparece cortada ou distorcida com o `scaleMode`/`imageTransform`. Medir só caixas (`getBoundingClientRect`) não pega esses casos.
 
 ## Regra de Ação (o que não precisa esperar o usuário)
 
